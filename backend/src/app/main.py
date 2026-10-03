@@ -1,0 +1,63 @@
+"""Application bootstrap.
+
+Thin wiring only (Standard §2): lifespan-managed DB initialization,
+correlation-ID propagation middleware, the standardized 500 error handler
+(Architecture §4), and the ``/health`` liveness route.  No business logic.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import uuid
+from collections.abc import AsyncGenerator, Awaitable, Callable
+
+from fastapi import FastAPI, Request
+from starlette.responses import JSONResponse, Response
+
+from app.db.session import init_db
+
+
+@contextlib.asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
+    """Initialize the database schema on startup; nothing to tear down."""
+    await init_db()
+    yield
+
+
+app = FastAPI(title="Dental Clinic Appointment Tracker", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def correlation_id_middleware(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+) -> Response:
+    """Extract or generate a correlation ID and propagate it on the response."""
+    correlation_id = request.headers.get("X-Correlation-ID") or str(uuid.uuid4())
+    request.state.correlation_id = correlation_id
+    response = await call_next(request)
+    response.headers["X-Correlation-ID"] = correlation_id
+    return response
+
+
+@app.exception_handler(Exception)
+async def internal_server_error_handler(
+    request: Request, exc: Exception
+) -> JSONResponse:
+    """Map every unhandled exception to the standardized 500 error body."""
+    correlation_id = getattr(request.state, "correlation_id", "unknown")
+    return JSONResponse(
+        status_code=500,
+        headers={"X-Correlation-ID": correlation_id},
+        content={
+            "error": "internal_server_error",
+            "message": str(exc),
+            "correlation_id": correlation_id,
+        },
+    )
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    """Liveness probe."""
+    return {"status": "ok"}

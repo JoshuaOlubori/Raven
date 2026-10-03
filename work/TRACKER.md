@@ -1,10 +1,10 @@
 # Tracker
 
-_Generated 2026-10-03 18:09 — 0/12 tickets done._
+_Generated 2026-10-03 21:38 — 0/12 tickets done._
 
 | ID | Title | Status | Mode | Blocked by |
 |---|---|---|---|---|
-| [T-001](tickets/T-001-walking-skeleton.md) | Walking skeleton and test infrastructure | todo | AFK | - |
+| [T-001](tickets/T-001-walking-skeleton.md) | Walking skeleton and test infrastructure | in-review | AFK | - |
 | [T-002](tickets/T-002-staff-auth-tokens.md) | Staff authentication and token issuance | todo | AFK | T-001 |
 | [T-003](tickets/T-003-staff-management-rbac.md) | Staff management and RBAC route guards | todo | AFK | T-002 |
 | [T-004](tickets/T-004-dental-services-catalog.md) | Dental services catalog management | todo | AFK | T-003 |
