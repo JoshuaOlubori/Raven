@@ -1,7 +1,7 @@
 ---
 id: T-001
 title: Walking skeleton and test infrastructure
-status: in-review
+status: done
 mode: AFK
 blocked_by: -
 spec_refs: specs/00-architecture.md#2-stack-and-versions, specs/00-architecture.md#4-cross-cutting-design, specs/00-architecture.md#5-test-architecture
@@ -109,3 +109,4 @@ against an in-memory DB.
 - [x] AC4 all four quality gates pass (ruff check / format --check / mypy src / pytest -q)
 
 ## Review history
+- [Review T-001 round 1 — Approve](reviews/T-001-review-1.md): 0B/0M/1m/4n. All gates green, all ACs met. Minor: missing structured exception logging. Nits: error-body field order, middleware vs exception_handler pattern, leftover src/backend/ stub, shared test_lifecycle table.

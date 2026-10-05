@@ -17,9 +17,9 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.orm import DeclarativeBase
 
 from app.config import get_settings
+from app.models.base import Base
 
 settings = get_settings()
 
@@ -30,16 +30,12 @@ SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
 )
 
 
-class Base(DeclarativeBase):
-    """Declarative base for all domain models."""
-
-
 async def init_db(target_engine: AsyncEngine | None = None) -> None:
     """Create all declared tables.
 
     Defaults to the module-level engine; pass an explicit engine (e.g. an
     in-memory test engine) to target a different connection.
     """
-    target: AsyncEngine = target_engine or engine
+    target: AsyncEngine = target_engine if target_engine is not None else engine
     async with target.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

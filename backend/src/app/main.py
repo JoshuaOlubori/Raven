@@ -1,13 +1,15 @@
 """Application bootstrap.
 
 Thin wiring only (Standard §2): lifespan-managed DB initialization,
-correlation-ID propagation middleware, the standardized 500 error handler
-(Architecture §4), and the ``/health`` liveness route.  No business logic.
+correlation-ID propagation middleware, structured logging on unhandled
+errors, the standardized error handlers (Architecture §4), and router
+mounting.  No business logic lives here.
 """
 
 from __future__ import annotations
 
 import contextlib
+import logging
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 
@@ -15,6 +17,11 @@ from fastapi import FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
 from app.db.session import init_db
+from app.models.staff import Staff  # noqa: F401 — register table on Base.metadata
+from app.routers.auth import router as auth_router
+from app.services.auth_service import AuthError
+
+logger = logging.getLogger("app")
 
 
 @contextlib.asynccontextmanager
@@ -25,6 +32,9 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
 
 
 app = FastAPI(title="Dental Clinic Appointment Tracker", lifespan=lifespan)
+
+# Mount API routers
+app.include_router(auth_router)
 
 
 @app.middleware("http")
@@ -40,19 +50,43 @@ async def correlation_id_middleware(
     return response
 
 
+@app.exception_handler(AuthError)
+async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:
+    """Map ``AuthError`` subclasses to the standardized error body (Spec 01 §7)."""
+    correlation_id = getattr(request.state, "correlation_id", "unknown")
+    return JSONResponse(
+        status_code=exc.status_code,
+        headers={"X-Correlation-ID": correlation_id},
+        content={
+            "error": exc.error_code,
+            "message": exc.message,
+            "correlation_id": correlation_id,
+        },
+    )
+
+
 @app.exception_handler(Exception)
 async def internal_server_error_handler(
-    request: Request, exc: Exception
+    request: Request,
+    exc: Exception,
 ) -> JSONResponse:
-    """Map every unhandled exception to the standardized 500 error body."""
+    """Map every unhandled exception to the standardized 500 error body.
+
+    Also logs the exception with structured context (T-001 review: missing
+    structured exception logging, Architecture §4).
+    """
     correlation_id = getattr(request.state, "correlation_id", "unknown")
+    logger.exception(
+        "Unhandled server error",
+        extra={"correlation_id": correlation_id},
+    )
     return JSONResponse(
         status_code=500,
         headers={"X-Correlation-ID": correlation_id},
         content={
             "error": "internal_server_error",
-            "message": str(exc),
             "correlation_id": correlation_id,
+            "message": str(exc),
         },
     )
 

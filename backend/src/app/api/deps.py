@@ -1,12 +1,9 @@
 """Dependency-injection graph for the API layer (Standard §5).
 
-Holds the single source of truth for the request-scoped database session:
-``get_db_session`` yields an ``AsyncSession``, commits on the success path,
-rolls back on any exception, and always closes the session (Standard §4).
-
-The ``*Dep`` type-alias pattern lets path operations consume the dependency
-through a clean ``Annotated`` declaration rather than repeating
-``Depends(...)``.
+Holds the single source of truth for the request-scoped database session and
+the ``*Dep`` type aliases that routers consume.  All dependency factory
+functions live here; routers only import ``Annotated`` type aliases ending
+in ``Dep``.
 """
 
 from __future__ import annotations
@@ -17,7 +14,13 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings, get_settings
 from app.db.session import SessionLocal
+from app.services.auth_service import AuthService
+
+# ---------------------------------------------------------------------------
+# Database session (Standard §4)
+# ---------------------------------------------------------------------------
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession]:
@@ -33,3 +36,26 @@ async def get_db_session() -> AsyncGenerator[AsyncSession]:
 
 
 DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
+
+
+# ---------------------------------------------------------------------------
+# Settings dependency
+# ---------------------------------------------------------------------------
+
+SettingsDep = Annotated[Settings, Depends(get_settings)]
+
+
+# ---------------------------------------------------------------------------
+# Auth service dependency (Spec 01 §4 — Layer 3)
+# ---------------------------------------------------------------------------
+
+
+def get_auth_service(
+    session: DbSessionDep,
+    settings: SettingsDep,
+) -> AuthService:
+    """Construct an ``AuthService`` with the request-scoped session and settings."""
+    return AuthService(session=session, settings=settings)
+
+
+AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
