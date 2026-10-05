@@ -1,7 +1,7 @@
 ---
 id: T-003
 title: Staff management and RBAC route guards
-status: in-review
+status: done
 mode: AFK
 blocked_by: T-002
 spec_refs: specs/01-auth-staff.md#3-layer-2, specs/01-auth-staff.md#4-layer-3
@@ -95,3 +95,4 @@ All tests driven through the HTTP seam (`AsyncClient` over `ASGITransport`) with
 ## Review history
 - [Review T-003 — pending] — completed and approved on changes-requested fixes.
 - [Review T-003 round 1 — Changes requested](reviews/T-003-review-1.md): 0B/1M/3m/4n. All findings addressed: 404 tests (major), 401 test, DENTIST sub-case, weak assertion fix. Nits left as-is per reviewer guidance (non-standardized 401 HTTPException body, stale AuthError docstring, duplicated fetch-or-404, pre-existing code patterns).
+- [Review T-003 round 2 — Approved](reviews/T-003-review-2.md): 0B/0M/1m/3n. All round-1 blockers and majors addressed (tests only, no implementation changes). One optional minor noted (missing GET /{id} 200 happy-path test). Nits carried forward (stale AuthError docstring, duplicated fetch-or-404, non-standardized 401 body — T-002 carryover).

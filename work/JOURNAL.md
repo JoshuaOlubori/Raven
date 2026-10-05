@@ -33,3 +33,5 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-05 12:45 | build | T-003 | T-003 changes-requested fixes: 5 new tests (404 paths, DENTIST sub-case, 401 on staff endpoints, hardened list-filter assertion), 22 tests green, all 4 quality gates pass -> in-review |
 | 2026-10-05 12:35 | - | T-003 | status -> in-review |
 | 2026-10-05 12:35 | - | - | T-003 changes-requested fixes committed (c6e7dbe): 5 new tests (404 paths, DENTIST sub-case, 401 on staff endpoints, hardened list-filter assertion), 22 tests green, all 4 quality gates pass -> in-review |
+| 2026-10-05 12:52 | - | T-003 | status -> done |
+| 2026-10-05 12:52 | - | T-003 | review round 2: approve, 0B/0M/1m/3n — all round-1 findings addressed, gates green |
