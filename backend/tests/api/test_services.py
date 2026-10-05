@@ -6,6 +6,7 @@ drawn from the PRD and spec, never from the implementation under test.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Callable
 from uuid import UUID
 
@@ -126,3 +127,147 @@ async def test_list_services_active_filter(
     ids = [item["id"] for item in body]
     assert service_id not in ids
     assert all(item["isActive"] is True for item in body)
+
+
+# ---------------------------------------------------------------------------
+# Failure-path and coverage gaps addressed per Review T-004 round 1
+# ---------------------------------------------------------------------------
+
+
+async def test_get_nonexistent_service_returns_404(
+    admin_staff: Staff,
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """Spec 03 §4: GET /services/{id} with non-existent UUID → 404 SERVICE_NOT_FOUND."""
+    headers = auth_headers(admin_staff.id, admin_staff.role)
+
+    response = await client.get(
+        f"/api/v1/services/{uuid.uuid4()}",
+        headers=headers,
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["error"] == "SERVICE_NOT_FOUND"
+
+
+async def test_patch_nonexistent_service_returns_404(
+    admin_staff: Staff,
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """Spec 03 §4: PATCH non-existent service → 404 SERVICE_NOT_FOUND."""
+    headers = auth_headers(admin_staff.id, admin_staff.role)
+
+    response = await client.patch(
+        f"/api/v1/services/{uuid.uuid4()}",
+        headers=headers,
+        json={"isActive": False},
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["error"] == "SERVICE_NOT_FOUND"
+
+
+async def test_get_service_by_id_200(
+    admin_staff: Staff,
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """Spec 03 §4: GET /services/{id} returns the saved service (200 happy path)."""
+    headers = auth_headers(admin_staff.id, admin_staff.role)
+
+    create_resp = await client.post(
+        "/api/v1/services/",
+        headers=headers,
+        json={"name": "Consultation", "durationMinutes": 60},
+    )
+    assert create_resp.status_code == 201
+    service_id = create_resp.json()["id"]
+
+    response = await client.get(
+        f"/api/v1/services/{service_id}",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == service_id
+    assert body["name"] == "Consultation"
+    assert body["durationMinutes"] == 60
+    assert body["isActive"] is True
+
+
+async def test_non_admin_cannot_edit_service_403(
+    receptionist_staff: Staff,
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """Spec 03 §4: non-admin (receptionist) PATCH /services/{id} → 403 Forbidden."""
+    headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+
+    response = await client.patch(
+        f"/api/v1/services/{uuid.uuid4()}",
+        headers=headers,
+        json={"isActive": False},
+    )
+
+    assert response.status_code == 403
+    body = response.json()
+    assert body["error"] == "RBAC_FORBIDDEN"
+    assert "Insufficient role" in body["message"]
+
+
+async def test_dentist_cannot_create_service_403(
+    dentist_staff: Staff,
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """Spec 03 §4 / §5: DENTIST (non-admin) POST /services → 403 Forbidden."""
+    headers = auth_headers(dentist_staff.id, dentist_staff.role)
+
+    response = await client.post(
+        "/api/v1/services/",
+        headers=headers,
+        json={"name": "Dentist Attempt", "durationMinutes": 30},
+    )
+
+    assert response.status_code == 403
+    body = response.json()
+    assert body["error"] == "RBAC_FORBIDDEN"
+    assert "Insufficient role" in body["message"]
+
+
+async def test_patch_duplicate_name_returns_409(
+    admin_staff: Staff,
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """Spec 03 §7: PATCH rename to existing name → 409 SERVICE_NAME_EXISTS."""
+    headers = auth_headers(admin_staff.id, admin_staff.role)
+
+    first = await client.post(
+        "/api/v1/services/",
+        headers=headers,
+        json={"name": "Root Canal", "durationMinutes": 90},
+    )
+    assert first.status_code == 201
+    second = await client.post(
+        "/api/v1/services/",
+        headers=headers,
+        json={"name": "Bridge", "durationMinutes": 120},
+    )
+    assert second.status_code == 201
+    service_b_id = second.json()["id"]
+
+    response = await client.patch(
+        f"/api/v1/services/{service_b_id}",
+        headers=headers,
+        json={"name": "Root Canal"},
+    )
+
+    assert response.status_code == 409
+    body = response.json()
+    assert body["error"] == "SERVICE_NAME_EXISTS"

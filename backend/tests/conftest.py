@@ -240,3 +240,23 @@ async def receptionist_staff(
         await session.commit()
         await session.refresh(staff)
         return staff
+
+
+@pytest.fixture
+async def dentist_staff(
+    test_session_local: async_sessionmaker,
+    override_dbsession: None,
+) -> Staff:
+    """Persist an active DENTIST staff member (for RBAC auth headers)."""
+    async with test_session_local() as session:
+        staff = Staff(
+            email=f"dentist-{uuid.uuid4().hex[:8]}@clinic.com",
+            hashed_password="irrelevant",
+            full_name="Dentist User",
+            role="DENTIST",
+            is_active=True,
+        )
+        session.add(staff)
+        await session.commit()
+        await session.refresh(staff)
+        return staff

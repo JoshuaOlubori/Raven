@@ -21,3 +21,10 @@ def test_invalid_duration_rejected_422() -> None:
     # negative duration is invalid
     with pytest.raises(ValidationError):
         ServiceCreate(name="Cleaning", duration_minutes=-15)
+
+    # duration above 480 is invalid (max is 480 = 8 hours)
+    with pytest.raises(ValidationError):
+        ServiceCreate(name="Cleaning", duration_minutes=481)
+
+    # duration of 480 (8 hours) is the valid upper bound
+    ServiceCreate(name="Cleaning", duration_minutes=480)

@@ -1,7 +1,7 @@
 ---
 id: T-004
 title: Dental services catalog management
-status: in-review
+status: in-progress
 mode: AFK
 blocked_by: T-003
 spec_refs: specs/03-services.md#2-layer-1, specs/03-services.md#3-layer-2, specs/03-services.md#4-layer-3
@@ -82,3 +82,21 @@ None from spec. `get_service_by_name` was added to the repository as a necessary
 Commit: `d7adef5` — T-004: Dental services catalog management
 
 ### Review history
+- [Review T-004 round 1 — Changes requested](reviews/T-004-review-1.md): 0B/1M/5m/0n. Major: missing 404 failure-path tests for GET /{id} and PATCH (ServiceNotFoundError → 404 wiring untested at API seam). Minors: AC3 upper-bound (>480) untested, AC2 edit (PATCH 403) sub-case untested, DENTIST-role 403 untested, GET /{id} 200 happy path untested, PATCH 409 (duplicate-name-on-rename) untested. All 4 quality gates green (ruff, ruff format, mypy, 27 passed). Implementer must add 404 tests; minors optional.
+
+### Changes-requested fixes (round 1 → round 2)
+**No implementation changes.** The review confirmed the implementation was correct — only test coverage was missing. Six tests plus one fixture were added:
+
+- **Major (required):**
+  - `tests/api/test_services.py::test_get_nonexistent_service_returns_404` — GET /services/{non-existent-uuid} → 404, `body["error"] == "SERVICE_NOT_FOUND"`.
+  - `tests/api/test_services.py::test_patch_nonexistent_service_returns_404` — PATCH /services/{non-existent-uuid} → 404, `body["error"] == "SERVICE_NOT_FOUND"`.
+- **Minors (recommended, all addressed):**
+  - `tests/api/test_services.py::test_get_service_by_id_200` — GET /services/{id} happy path (200 + field round-trip).
+  - `tests/api/test_services.py::test_non_admin_cannot_edit_service_403` — PATCH with RECEPTIONIST → 403 `RBAC_FORBIDDEN` (AC2 "edit" sub-case).
+  - `tests/api/test_services.py::test_dentist_cannot_create_service_403` — POST with DENTIST → 403 `RBAC_FORBIDDEN` (AC2 non-Admin DENTIST sub-case).
+  - `tests/api/test_services.py::test_patch_duplicate_name_returns_409` — PATCH renaming to an existing name → 409 `SERVICE_NAME_EXISTS` (PATCH 409 on rename).
+  - `tests/unit/test_schemas.py::test_invalid_duration_rejected_422` — extended to cover upper bound (481 rejected, 480 accepted) (AC3 upper-bound).
+  - `backend/tests/conftest.py` — added `dentist_staff` fixture (DENTIST role, mirrors `admin_staff`/`receptionist_staff`).
+
+### Commands run (quality gates — post-fix)
+`uv run --directory backend ruff check` ✓ · `uv run --directory backend ruff format --check` ✓ · `uv run --directory backend mypy src` ✓ · `uv run --directory backend pytest -q` ✓ (33 passed)
