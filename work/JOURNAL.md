@@ -35,3 +35,6 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-05 12:35 | - | - | T-003 changes-requested fixes committed (c6e7dbe): 5 new tests (404 paths, DENTIST sub-case, 401 on staff endpoints, hardened list-filter assertion), 22 tests green, all 4 quality gates pass -> in-review |
 | 2026-10-05 12:52 | - | T-003 | status -> done |
 | 2026-10-05 12:52 | - | T-003 | review round 2: approve, 0B/0M/1m/3n — all round-1 findings addressed, gates green |
+| 2026-10-05 13:46 | - | T-004 | status -> in-progress |
+| 2026-10-05 14:23 | - | T-004 | status -> in-review |
+| 2026-10-05 14:23 | build | - | T-004 built: ServiceDuration constrained type, DentalService model, ServiceCatalog domain service (create/get/list/update with name-uniqueness + existence guards), 4 endpoints (POST Admin, GET list + GET /{id} any staff, PATCH Admin), 5 tests (schema unit + 4 API). All 4 quality gates green (27 passed). -> in-review |

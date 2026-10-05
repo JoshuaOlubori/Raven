@@ -1,13 +1,13 @@
 # Tracker
 
-_Generated 2026-10-05 12:52 — 3/12 tickets done._
+_Generated 2026-10-05 14:23 — 3/12 tickets done._
 
 | ID | Title | Status | Mode | Blocked by |
 |---|---|---|---|---|
 | [T-001](tickets/T-001-walking-skeleton.md) | Walking skeleton and test infrastructure | done | AFK | - |
 | [T-002](tickets/T-002-staff-auth-tokens.md) | Staff authentication and token issuance | done | AFK | T-001 |
 | [T-003](tickets/T-003-staff-management-rbac.md) | Staff management and RBAC route guards | done | AFK | T-002 |
-| [T-004](tickets/T-004-dental-services-catalog.md) | Dental services catalog management | todo | AFK | T-003 |
+| [T-004](tickets/T-004-dental-services-catalog.md) | Dental services catalog management | in-review | AFK | T-003 |
 | [T-005](tickets/T-005-patient-management-search.md) | Patient profile management, search, and soft delete | todo | AFK | T-003 |
 | [T-006](tickets/T-006-dentist-shifts-time-off.md) | Dentist recurring shifts and time-off blocks | todo | AFK | T-003 |
 | [T-007](tickets/T-007-availability-engine.md) | Dynamic availability calculation engine | todo | AFK | T-004, T-006 |

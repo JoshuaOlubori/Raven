@@ -79,6 +79,6 @@ None from spec. `get_service_by_name` was added to the repository as a necessary
 ### Commands run (quality gates)
 `uv run --directory backend ruff check` ✓ · `uv run --directory backend ruff format --check` ✓ · `uv run --directory backend mypy src` ✓ · `uv run --directory backend pytest -q` ✓ (27 passed)
 
-Commit: pending
+Commit: `d7adef5` — T-004: Dental services catalog management
 
 ### Review history
