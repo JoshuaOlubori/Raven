@@ -1,14 +1,16 @@
-"""Authentication dependency layer (Spec 01 §4 — Layer 3, Architecture §4).
+"""Authentication and RBAC dependency layer (Spec 01 §4 — Layer 3).
 
 Provides ``CurrentUser`` and the ``get_current_user`` dependency that extracts
 a Bearer JWT from the ``Authorization`` header, validates it, looks up the
 staff member, and enforces ``is_active``.
 
-RBAC route guards (``require_roles``) belong in T-003.
+Also provides ``require_roles`` — a closure-based dependency factory that
+enforces role-based access control (RBAC) on protected endpoints (T-003).
 """
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, cast
@@ -20,6 +22,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.api.deps import AuthServiceDep, DbSessionDep
 from app.db.repository import get_staff_by_id
+from app.exceptions import ForbiddenError
 from app.schemas import StaffRole
 
 security = HTTPBearer()
@@ -70,3 +73,29 @@ async def get_current_user(
 
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
+
+
+# ---------------------------------------------------------------------------
+# RBAC route guards (Spec 01 §4 — Layer 3, T-003)
+# ---------------------------------------------------------------------------
+
+
+def require_roles(*roles: str) -> Callable[[CurrentUser], Awaitable[CurrentUser]]:
+    """Closure-based dependency factory that enforces RBAC (Spec 01 §4).
+
+    Returns an async dependency that resolves the authenticated
+    ``CurrentUser`` and raises ``ForbiddenError`` (→ 403 standardized body)
+    when the user's role is not among the permitted ``roles``.
+
+    Typical usage::
+
+        @router.post("/", dependencies=[Depends(require_roles("ADMIN"))])
+        async def create_staff(...): ...
+    """
+
+    async def role_guard(current_user: CurrentUserDep) -> CurrentUser:
+        if current_user.role not in roles:
+            raise ForbiddenError()
+        return current_user
+
+    return role_guard

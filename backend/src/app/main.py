@@ -17,9 +17,10 @@ from fastapi import FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
 from app.db.session import init_db
+from app.exceptions import DomainError
 from app.models.staff import Staff  # noqa: F401 — register table on Base.metadata
 from app.routers.auth import router as auth_router
-from app.services.auth_service import AuthError
+from app.routers.staff import router as staff_router
 
 logger = logging.getLogger("app")
 
@@ -35,6 +36,7 @@ app = FastAPI(title="Dental Clinic Appointment Tracker", lifespan=lifespan)
 
 # Mount API routers
 app.include_router(auth_router)
+app.include_router(staff_router)
 
 
 @app.middleware("http")
@@ -50,9 +52,14 @@ async def correlation_id_middleware(
     return response
 
 
-@app.exception_handler(AuthError)
-async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:
-    """Map ``AuthError`` subclasses to the standardized error body (Spec 01 §7)."""
+@app.exception_handler(DomainError)
+async def domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
+    """Map ``DomainError`` subclasses to the standardized error body (Architecture §4).
+
+    ``AuthError``, ``EmailAlreadyExistsError``, ``StaffNotFoundError``, and
+    ``ForbiddenError`` all inherit from ``DomainError``, so this single
+    handler covers every domain exception.
+    """
     correlation_id = getattr(request.state, "correlation_id", "unknown")
     return JSONResponse(
         status_code=exc.status_code,

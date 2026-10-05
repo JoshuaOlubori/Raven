@@ -24,6 +24,7 @@ from argon2.exceptions import VerifyMismatchError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.exceptions import DomainError
 
 # ---------------------------------------------------------------------------
 # Token duration (Architecture §4 — "short-lived JWT access tokens")
@@ -37,7 +38,7 @@ TOKEN_EXPIRY_MINUTES: int = 30
 # ---------------------------------------------------------------------------
 
 
-class AuthError(Exception):
+class AuthError(DomainError):
     """Base class for authentication / authorization domain errors.
 
     Subclasses set ``error_code``, ``message``, and optionally ``status_code``.

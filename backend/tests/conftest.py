@@ -194,3 +194,49 @@ def auth_headers() -> Callable[[UUID, str], dict[str, str]]:
         return {"Authorization": f"Bearer {token}"}
 
     return _make
+
+
+# ---------------------------------------------------------------------------
+# RBAC role fixtures — staff records with ADMIN / RECEPTIONIST roles so that
+# get_current_user (which resolves the role from the DB) sees the correct value.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def admin_staff(
+    test_session_local: async_sessionmaker,
+    override_dbsession: None,
+) -> Staff:
+    """Persist an active ADMIN staff member (for RBAC auth headers)."""
+    async with test_session_local() as session:
+        staff = Staff(
+            email=f"admin-{uuid.uuid4().hex[:8]}@clinic.com",
+            hashed_password="irrelevant",
+            full_name="Admin User",
+            role="ADMIN",
+            is_active=True,
+        )
+        session.add(staff)
+        await session.commit()
+        await session.refresh(staff)
+        return staff
+
+
+@pytest.fixture
+async def receptionist_staff(
+    test_session_local: async_sessionmaker,
+    override_dbsession: None,
+) -> Staff:
+    """Persist an active RECEPTIONIST staff member (for RBAC auth headers)."""
+    async with test_session_local() as session:
+        staff = Staff(
+            email=f"recep-{uuid.uuid4().hex[:8]}@clinic.com",
+            hashed_password="irrelevant",
+            full_name="Receptionist User",
+            role="RECEPTIONIST",
+            is_active=True,
+        )
+        session.add(staff)
+        await session.commit()
+        await session.refresh(staff)
+        return staff

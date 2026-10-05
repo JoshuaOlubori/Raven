@@ -25,3 +25,4 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-05 10:47 | build | T-002 | T-002 changes-requested fixes committed (af3d419): AC5 tests, AC2 non-existent email test, 500 handler sanitized |
 | 2026-10-05 11:07 | - | T-002 | status -> done |
 | 2026-10-05 11:07 | - | T-002 | review round 2: approve, 0B/0M/2m/4n |
+| 2026-10-05 11:19 | - | T-003 | status -> in-progress |

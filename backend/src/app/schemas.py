@@ -76,3 +76,24 @@ class StaffRead(BaseModel):
     role: StaffRole
     is_active: bool = Field(alias="isActive")
     created_at: datetime = Field(alias="createdAt")
+
+
+class StaffCreate(BaseModel):
+    """Staff registration input (Admin only) — Spec 01 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    email: EmailStr
+    password: PasswordStr
+    full_name: NonEmptyStr = Field(alias="fullName")
+    role: StaffRole
+
+
+class StaffUpdate(BaseModel):
+    """Partial staff update input — Spec 01 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    full_name: NonEmptyStr | None = Field(default=None, alias="fullName")
+    role: StaffRole | None = None
+    is_active: bool | None = Field(default=None, alias="isActive")
