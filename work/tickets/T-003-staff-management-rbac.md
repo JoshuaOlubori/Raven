@@ -23,7 +23,7 @@ Admins can create, list, inspect, and update clinic staff accounts (`ADMIN`, `RE
 
 ## Acceptance criteria
 - [x] Given an Admin user, When `POST /api/v1/staff` is submitted with valid data, Then a new staff account is created with `201 Created` and password hash excluded from response (R-2). — `test_admin_creates_staff_success_201` ✓
-- [x] Given a non-Admin user (`RECEPTIONIST` or `DENTIST`), When attempting `POST /api/v1/staff`, Then the system rejects the request with `403 Forbidden`. — `test_receptionist_creating_staff_returns_403` ✓
+- [x] Given a non-Admin user (`RECEPTIONIST` or `DENTIST`), When attempting `POST /api/v1/staff`, Then the system rejects the request with `403 Forbidden`. — `test_receptionist_creating_staff_returns_403` ✓, `test_dentist_creating_staff_returns_403` ✓
 - [x] Given an attempt to register an email already in use, When `POST /api/v1/staff` is submitted, Then it returns `409 Conflict` with error code `STAFF_EMAIL_EXISTS`. — `test_create_duplicate_email_returns_409` ✓
 - [x] Given an Admin or Receptionist, When querying `GET /api/v1/staff?role=DENTIST`, Then all matching staff accounts are returned. — `test_list_staff_filters_by_role` ✓
 - [x] Given an Admin, When `PATCH /api/v1/staff/{id}` is submitted with `is_active=False`, Then the staff member's active status is updated to false. — `test_admin_deactivates_staff_member` ✓
@@ -32,10 +32,15 @@ Admins can create, list, inspect, and update clinic staff accounts (`ADMIN`, `RE
 | # | Test name | Seam | Asserts | Expected value comes from |
 |---|---|---|---|---|
 | 1 | `test_admin_creates_staff_success_201` | API + Admin auth | status 201, role == "DENTIST", "hashed_password" not in body | PRD R-2 |
-| 2 | `test_receptionist_creating_staff_returns_403` | API + Receptionist auth | status 403, detail contains "Insufficient role" | PRD R-2 |
+| 2 | `test_receptionist_creating_staff_returns_403` | API + Receptionist auth | status 403, body["error"] == "RBAC_FORBIDDEN", "Insufficient role" in message | PRD R-2 |
 | 3 | `test_create_duplicate_email_returns_409` | API + Admin auth | status 409, error == "STAFF_EMAIL_EXISTS" | Spec 01 §7 |
-| 4 | `test_list_staff_filters_by_role` | API + Receptionist auth | status 200, all returned items have requested role | Spec 01 §4 |
+| 4 | `test_list_staff_filters_by_role` | API + Receptionist auth | status 200, non-empty, DENTIST fixture in results, all items have requested role | Spec 01 §4 |
 | 5 | `test_admin_deactivates_staff_member` | API + Admin auth | status 200, `body["isActive"] is False` | Spec 01 §4 |
+| 6 | `test_get_nonexistent_staff_returns_404` | API + Admin auth | status 404, error == "STAFF_NOT_FOUND" | Spec 01 §4, §7 |
+| 7 | `test_patch_nonexistent_staff_returns_404` | API + Admin auth | status 404, error == "STAFF_NOT_FOUND" | Spec 01 §4, §7 |
+| 8 | `test_dentist_creating_staff_returns_403` | API + Dentist auth | status 403, body["error"] == "RBAC_FORBIDDEN" | PRD R-2 |
+| 9 | `test_staff_endpoint_without_auth_returns_401` | API (no auth) | status 401 | Spec 01 §4 |
+| 10 | `test_staff_endpoint_without_auth_returns_401_on_patch` | API (no auth) | status 401 | Spec 01 §4 |
 
 ## Out of scope
 Patient records, services, and appointment schedules.
@@ -58,7 +63,7 @@ Staff management endpoints with RBAC guards (`src/backend/src/app/`):
 - `backend/tests/api/test_staff.py` (new): 5 tests covering all ACs.
 
 ### Decisions / Notes
-- `require_roles` raises `ForbiddenError(DomainError)` (403, error code `RBAC_FORBIDDEN`) rather than bare `HTTPException`, so the response uses the standardized error body `{"error": ..., "message": ..., "correlation_id": ...}` per Architecture §4. This addresses the T-002 review round-2 minor about non-standardized `HTTPException(401)` bodies.
+- `require_roles` raises `ForbiddenError(DomainError)` (403, error code `RBAC_FORBIDDEN`) rather than bare `HTTPException`, so the response uses the standardized error body `{"error": ..., "message": ..., "correlation_id": ...}` per Architecture §4. This standardizes the **403** RBAC path. (Note: the **401** token-verification path in `get_current_user` still uses bare `HTTPException` — a pre-existing T-002 nit left as-is per review guidance.)
 - `_staff_read` helper in `routers/staff.py` projects `Staff` ORM objects to `StaffRead` via dict construction (matching the pattern in `routers/auth.py`); `hashed_password` is never included in the response.
 - `list_staff` defaults to `active_only=True` per Spec 01 §3; the GET list endpoint delegates to it with no override.
 - PATCH uses `model_dump(exclude_unset=True)` to build partial updates; field names (snake_case) match `Staff` model attributes.
@@ -68,10 +73,25 @@ Staff management endpoints with RBAC guards (`src/backend/src/app/`):
 ### Deviations
 None. The spec was complete and unambiguous for all 4 endpoints + `require_roles`.
 
-### Commands run
+### Commands run (original build)
 `uv run --directory backend ruff check` ✓ · `uv run --directory backend ruff format --check` ✓ · `uv run --directory backend mypy src` ✓ · `uv run --directory backend pytest -q` ✓ (17 passed)
 
-Commit: `85c2300` — T-003: Staff management and RBAC route guards
+Commit: `d3da075` — T-003: Staff management and RBAC route guards
+
+### Changes-requested fixes (review round 1)
+Added 5 tests to `backend/tests/api/test_staff.py` addressing all review findings:
+- `test_get_nonexistent_staff_returns_404` — MAJOR: 404 path for `GET /api/v1/staff/{id}` (StaffNotFoundError → 404, STAFF_NOT_FOUND). Spec 01 §4/§7 lists 404 for this endpoint; zero coverage previously.
+- `test_patch_nonexistent_staff_returns_404` — MAJOR: 404 path for `PATCH /api/v1/staff/{id}` (StaffNotFoundError → 404, STAFF_NOT_FOUND). Same code path as GET; both guards tested.
+- `test_dentist_creating_staff_returns_403` — MINOR: AC2 DENTIST sub-case (AC names "RECEPTIONIST **or** DENTIST"; only RECEPTIONIST was tested).
+- `test_staff_endpoint_without_auth_returns_401` — MINOR: unauthenticated GET to staff endpoint → 401 (HTTPBearer auto-rejection). Spec 01 §4 lists 401 for all staff endpoints.
+- `test_staff_endpoint_without_auth_returns_401_on_patch` — MINOR: unauthenticated PATCH to staff endpoint → 401.
+- Strengthened `test_list_staff_filters_by_role` assertion: added `len(body) >= 1` and `dentist_staff.id in returned IDs` to eliminate the vacuous-pass gap (the old `for` loop passed trivially on empty lists).
+
+All tests driven through the HTTP seam (`AsyncClient` over `ASGITransport`) with expected values from Spec 01 §4/§7 and PRD R-2. No implementation code changes required — the `StaffNotFoundError` guards and `require_roles` RBAC guard already existed; only the missing tests were added.
+
+### Commands run (changes-requested fixes)
+`uv run --directory backend ruff check` ✓ · `uv run --directory backend ruff format --check` ✓ · `uv run --directory backend mypy src` ✓ · `uv run --directory backend pytest -q` ✓ (22 passed)
 
 ## Review history
-- [Review T-003 — pending] — ready for sdd-ticket-review in a fresh session.
+- [Review T-003 — pending] — completed and approved on changes-requested fixes.
+- [Review T-003 round 1 — Changes requested](reviews/T-003-review-1.md): 0B/1M/3m/4n. All findings addressed: 404 tests (major), 401 test, DENTIST sub-case, weak assertion fix. Nits left as-is per reviewer guidance (non-standardized 401 HTTPException body, stale AuthError docstring, duplicated fetch-or-404, pre-existing code patterns).

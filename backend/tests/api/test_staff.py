@@ -104,13 +104,13 @@ async def test_create_duplicate_email_returns_409(
 
 
 async def test_list_staff_filters_by_role(
-    admin_staff: Staff,
     test_staff: tuple[Staff, str],
     receptionist_staff: Staff,
     auth_headers: Callable[[UUID, str], dict[str, str]],
     client: AsyncClient,
 ) -> None:
     """Spec 01 §4: GET /api/v1/staff?role=DENTIST returns only DENTIST staff."""
+    dentist_staff, _ = test_staff
     headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
 
     response = await client.get(
@@ -121,9 +121,51 @@ async def test_list_staff_filters_by_role(
 
     assert response.status_code == 200
     body = response.json()
+    # The list must be non-empty — the DENTIST fixture must appear in results.
+    assert len(body) >= 1
+    assert str(dentist_staff.id) in [item["id"] for item in body]
     # Every returned staff must have the requested role.
     for item in body:
         assert item["role"] == "DENTIST"
+
+
+async def test_get_nonexistent_staff_returns_404(
+    admin_staff: Staff,
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """Spec 01 §4/§7: GET /api/v1/staff/{non-existent} → 404 STAFF_NOT_FOUND."""
+    headers = auth_headers(admin_staff.id, admin_staff.role)
+    nonexistent_id = "00000000-0000-0000-0000-000000000000"
+
+    response = await client.get(
+        f"/api/v1/staff/{nonexistent_id}",
+        headers=headers,
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["error"] == "STAFF_NOT_FOUND"
+
+
+async def test_patch_nonexistent_staff_returns_404(
+    admin_staff: Staff,
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """Spec 01 §4/§7: PATCH /api/v1/staff/{non-existent} → 404 STAFF_NOT_FOUND."""
+    headers = auth_headers(admin_staff.id, admin_staff.role)
+    nonexistent_id = "00000000-0000-0000-0000-000000000000"
+
+    response = await client.patch(
+        f"/api/v1/staff/{nonexistent_id}",
+        headers=headers,
+        json={"isActive": False},
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["error"] == "STAFF_NOT_FOUND"
 
 
 async def test_admin_deactivates_staff_member(
@@ -145,3 +187,50 @@ async def test_admin_deactivates_staff_member(
     assert response.status_code == 200
     body = response.json()
     assert body["isActive"] is False
+
+
+async def test_dentist_creating_staff_returns_403(
+    test_staff: tuple[Staff, str],
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """R-2: DENTIST attempts staff creation → 403 Forbidden (AC2 sub-case)."""
+    staff, _ = test_staff
+    headers = auth_headers(staff.id, staff.role)
+
+    response = await client.post(
+        "/api/v1/staff/",
+        headers=headers,
+        json={
+            "email": "newdentist@clinic.com",
+            "fullName": "Dr. Denied Dentist",
+            "password": "SecurePass123!",
+            "role": "DENTIST",
+        },
+    )
+
+    assert response.status_code == 403
+    body = response.json()
+    assert body["error"] == "RBAC_FORBIDDEN"
+    assert "Insufficient role" in body["message"]
+
+
+async def test_staff_endpoint_without_auth_returns_401(
+    client: AsyncClient,
+) -> None:
+    """Spec 01 §4: unauthenticated request to staff endpoint → 401."""
+    response = await client.get("/api/v1/staff/")
+
+    assert response.status_code == 401
+
+
+async def test_staff_endpoint_without_auth_returns_401_on_patch(
+    client: AsyncClient,
+) -> None:
+    """Spec 01 §4: unauthenticated PATCH to staff endpoint → 401."""
+    response = await client.patch(
+        "/api/v1/staff/00000000-0000-0000-0000-000000000000",
+        json={"isActive": False},
+    )
+
+    assert response.status_code == 401
