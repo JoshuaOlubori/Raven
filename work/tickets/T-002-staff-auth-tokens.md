@@ -1,7 +1,7 @@
 ---
 id: T-002
 title: Staff authentication and token issuance
-status: changes-requested
+status: in-progress
 mode: AFK
 blocked_by: T-001
 spec_refs: specs/01-auth-staff.md#2-layer-1, specs/01-auth-staff.md#3-layer-2, specs/01-auth-staff.md#4-layer-3
@@ -26,20 +26,24 @@ Staff members can securely log in using email and password to receive a signed J
 - [x] Given a missing or expired Bearer token, When accessing protected endpoints, Then it returns `401 Unauthorized`.
 
 ### Verification of acceptance criteria
-- [x] AC1 `POST /auth/token` → 200 with `accessToken`, `tokenType == "bearer"`, `expiresIn`, `role` (`test_login_success_returns_jwt_token`)
-- [x] AC2 invalid password / non-existent email → 401 `AUTH_INVALID_CREDENTIALS` (`test_login_invalid_password_returns_401`)
+- [x] AC1 `POST /auth/token` → 200 with `accessToken`, `tokenType == "bearer"`, `role` (`test_login_success_returns_jwt_token`)
+- [x] AC2 invalid password / non-existent email → 401 `AUTH_INVALID_CREDENTIALS` (`test_login_invalid_password_returns_401`, `test_login_nonexistent_email_returns_401`)
 - [x] AC3 inactive account → 401 `AUTH_INACTIVE_ACCOUNT` (`test_login_inactive_user_returns_401`)
 - [x] AC4 valid Bearer token → 200 `StaffRead` with matching email and role (`test_auth_me_returns_current_user_profile`)
-- [x] AC5 missing token → `HTTPBearer` auto-raises 401; expired/invalid → `HTTPException(401)` in `get_current_user` (covered by `PyJWTError` catch; no dedicated test per test plan row 5 scope)
+- [x] AC5 missing / invalid / expired Bearer token → 401 (`test_auth_me_missing_token_returns_401`, `test_auth_me_invalid_token_returns_401`, `test_auth_me_expired_token_returns_401`)
 
 ## Test plan
 | # | Test name | Seam | Asserts | Expected value comes from |
 |---|---|---|---|---|
 | 1 | `test_login_success_returns_jwt_token` | API | status 200, access_token in body, token_type == "bearer" | PRD R-1 |
+| 1b | `test_login_nonexistent_email_returns_401` | API | status 401, error == "AUTH_INVALID_CREDENTIALS" | Spec 01 §7 |
 | 2 | `test_login_invalid_password_returns_401` | API | status 401, error == "AUTH_INVALID_CREDENTIALS" | Spec 01 §7 |
 | 3 | `test_login_inactive_user_returns_401` | API | status 401, error == "AUTH_INACTIVE_ACCOUNT" | Spec 01 §7 |
 | 4 | `test_auth_me_returns_current_user_profile` | API + auth header | status 200, email and role match fixture | PRD R-1 |
 | 5 | `test_password_hashing_uses_argon2_and_threadpool` | Service unit | Argon2 hash prefix, password verified | NFR-6 |
+| 5b | `test_auth_me_missing_token_returns_401` | API | status 401, no Authorization header | Spec 01 §4 AC5 |
+| 5c | `test_auth_me_invalid_token_returns_401` | API | status 401, malformed Bearer token | Spec 01 §4 AC5 |
+| 5d | `test_auth_me_expired_token_returns_401` | API | status 401, expired JWT (built via pyjwt directly) | Spec 01 §4 AC5 |
 
 ## Out of scope
 Admin staff management CRUD and RBAC endpoint guards (handled in T-003).
@@ -64,9 +68,18 @@ Staff authentication and token issuance for the FastAPI backend (`src/app/`).
 
 ### Files touched
 - New: `src/app/models/base.py`, `src/app/models/__init__.py`, `src/app/models/staff.py`, `src/app/schemas.py`, `src/app/services/__init__.py`, `src/app/services/auth_service.py`, `src/app/api/auth.py`, `src/app/routers/__init__.py`, `src/app/routers/auth.py`
-- Modified: `src/app/db/session.py`, `src/app/db/repository.py`, `src/app/api/deps.py`, `src/app/main.py`, `tests/conftest.py`
+- Modified: `src/app/db/session.py`, `src/app/db/repository.py`, `src/app/api/deps.py`, `src/app/main.py`, `tests/conftest.py`, `tests/api/test_auth.py`, `tests/api/test_errors.py`
 - Deleted: `src/backend/__init__.py` (leftover stub from T-001 scaffold, flagged in T-001 review)
 - New tests: `tests/unit/test_auth_service.py`, `tests/api/test_auth.py`
+
+### Changes-requested fixes (review round 1)
+Review T-002-round-1: 0B 1M 2m 3n. Addressed the major and both minors; nits left as-is per review guidance.
+- **Major — AC5 missing test**: Added 3 tests to `tests/api/test_auth.py` covering the missing/expired/invalid Bearer-token → 401 paths on `GET /api/v1/auth/me`:
+  - `test_auth_me_missing_token_returns_401` — no `Authorization` header → `HTTPBearer(auto_error=True)` auto-raises 401.
+  - `test_auth_me_invalid_token_returns_401` — malformed JWT (`"Bearer not.a.valid.jwt"`) → `PyJWTError` catch in `get_current_user` → 401.
+  - `test_auth_me_expired_token_returns_401` — expired token built directly via `pyjwt.encode` with past `iat`/`exp` (not via `AuthService.create_token`, so expected value 401 comes from the spec). → `ExpiredSignatureError` (subclass of `PyJWTError`) → 401.
+- **Minor — AC2 incomplete branch**: Added `test_login_nonexistent_email_returns_401` covering the `staff is None` branch at `routers/auth.py:32–33` (non-existent email → 401 `AUTH_INVALID_CREDENTIALS`).
+- **Minor — 500 handler `str(exc)` leak**: Removed `"message": str(exc)` from the `internal_server_error_handler` response body in `main.py`, matching the sanitized template in `concurrency-and-ops.md` §Global Middleware. Updated `test_errors.py` to assert `"message"` is absent from the 500 body.
 
 ### Decisions / Notes
 - `AuthService.__init__` accepts `session` per Architecture §4 spec signature (`get_auth_service(session: DbSessionDep, settings: SettingsDep)`), but the session is optional (`Optional[AsyncSession] = None`) so `AuthService(Settings())` works as a clean unit test without a DB (test plan row 5).
@@ -76,9 +89,11 @@ Staff authentication and token issuance for the FastAPI backend (`src/app/`).
 - Missing Bearer token: `HTTPBearer(auto_error=True)` raises `HTTPException(401)` — FastAPI default handler returns 401, satisfying AC5.
 - JWT decode errors (expired/malformed): caught as `pyjwt.PyJWTError` → `HTTPException(401)` with `from None` to suppress exception chaining.
 - Structured logging in the 500 handler (T-001 review minor finding) added: `logger.exception("Unhandled server error", extra={"correlation_id": ...})`.
+- 500 handler response body sanitized (T-002 review round-1 minor): `"message": str(exc)` removed; body is now `{"error": "internal_server_error", "correlation_id": ...}` only, matching `concurrency-and-ops.md` §Global Middleware template. The exception text is still logged server-side via `logger.exception`.
 
 ### Commands run
-`uv sync`, `uv run ruff check`, `uv run ruff format --check`, `uv run mypy src`, `uv run pytest -q` — all green (8 tests, 17 source files).
+`uv run ruff check`, `uv run ruff format --check`, `uv run mypy src`, `uv run pytest -q` — all green (12 tests, 17 source files).
 
 ## Review history
 - [Review T-002 round 1 — Changes requested](reviews/T-002-review-1.md): 0B/1M/2m/3n. Gates green (ruff/ruff-format/mypy/pytest, 8 passed). Behavior correct & in-scope; AC5 missing test (major), 500 `str(exc)` leak + AC2 incomplete branch (minor), weak test assertions (nit).
+- Fixes applied: major (AC5) + both minors addressed; 3 nits left as-is per review guidance. Ready for round 2.

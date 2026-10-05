@@ -74,6 +74,10 @@ async def internal_server_error_handler(
 
     Also logs the exception with structured context (T-001 review: missing
     structured exception logging, Architecture §4).
+
+    The response body is sanitized: only ``error`` and ``correlation_id`` are
+    returned — ``str(exc)`` is logged server-side but never leaked to the
+    client (concurrency-and-ops.md §Global Middleware, T-002 review minor).
     """
     correlation_id = getattr(request.state, "correlation_id", "unknown")
     logger.exception(
@@ -86,7 +90,6 @@ async def internal_server_error_handler(
         content={
             "error": "internal_server_error",
             "correlation_id": correlation_id,
-            "message": str(exc),
         },
     )
 

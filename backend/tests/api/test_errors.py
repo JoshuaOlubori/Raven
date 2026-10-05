@@ -16,7 +16,8 @@ async def test_unhandled_exception_returns_500_error_body(client: AsyncClient) -
     assert response.status_code == 500
     body = response.json()
     assert body["error"] == "internal_server_error"
-    assert "message" in body and body["message"]
+    # No message field — the response must be sanitized (no str(exc) leak).
+    assert "message" not in body
     assert "correlation_id" in body and body["correlation_id"]
 
     header_cid = response.headers.get("X-Correlation-ID")

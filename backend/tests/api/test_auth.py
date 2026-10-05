@@ -7,10 +7,13 @@ drawn from the PRD and spec, never from the implementation under test.
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+import jwt as pyjwt
 from httpx import AsyncClient
 
+from app.config import Settings
 from app.models.staff import Staff
 
 
@@ -82,3 +85,66 @@ async def test_auth_me_returns_current_user_profile(
     body = response.json()
     assert body["email"] == staff.email
     assert body["role"] == staff.role
+
+
+async def test_login_nonexistent_email_returns_401(
+    override_dbsession: None,
+    client: AsyncClient,
+) -> None:
+    """R-1: non-existent email → 401 AUTH_INVALID_CREDENTIALS."""
+    response = await client.post(
+        "/api/v1/auth/token",
+        json={"username": "nonexistent@clinic.com", "password": "SecurePass123!"},
+    )
+
+    assert response.status_code == 401
+    body = response.json()
+    assert body["error"] == "AUTH_INVALID_CREDENTIALS"
+
+
+async def test_auth_me_missing_token_returns_401(
+    client: AsyncClient,
+) -> None:
+    """AC5: missing Bearer token → 401 on /me (HTTPBearer auto-rejection)."""
+    response = await client.get("/api/v1/auth/me")
+
+    assert response.status_code == 401
+
+
+async def test_auth_me_invalid_token_returns_401(
+    client: AsyncClient,
+) -> None:
+    """AC5: malformed Bearer token → 401 on /me."""
+    response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": "Bearer not.a.valid.jwt"},
+    )
+
+    assert response.status_code == 401
+
+
+async def test_auth_me_expired_token_returns_401(
+    test_staff: tuple[Staff, str],
+    client: AsyncClient,
+) -> None:
+    """AC5: expired Bearer token → 401 on /me."""
+    staff, _ = test_staff
+
+    # Build an expired token directly via pyjwt (not via AuthService) so the
+    # expected value — 401 — comes from the spec, not the code under test.
+    settings = Settings()
+    now = datetime.now(UTC)
+    payload = {
+        "sub": str(staff.id),
+        "role": staff.role,
+        "iat": now - timedelta(minutes=10),
+        "exp": now - timedelta(minutes=5),
+    }
+    expired_token = pyjwt.encode(payload, settings.jwt_secret_key, algorithm="HS256")
+
+    response = await client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {expired_token}"},
+    )
+
+    assert response.status_code == 401
