@@ -1,7 +1,7 @@
 ---
 id: T-004
 title: Dental services catalog management
-status: in-progress
+status: in-review
 mode: AFK
 blocked_by: T-003
 spec_refs: specs/03-services.md#2-layer-1, specs/03-services.md#3-layer-2, specs/03-services.md#4-layer-3
@@ -100,3 +100,8 @@ Commit: `d7adef5` — T-004: Dental services catalog management
 
 ### Commands run (quality gates — post-fix)
 `uv run --directory backend ruff check` ✓ · `uv run --directory backend ruff format --check` ✓ · `uv run --directory backend mypy src` ✓ · `uv run --directory backend pytest -q` ✓ (33 passed)
+
+Commit: `25ba105` — T-004: Add test coverage for review round 1 changes-requested
+
+### Review history (continued)
+- [Review T-004 round 2 — Approve](reviews/T-004-review-2.md): 0B/0M/0m/1n. All round-1 findings resolved: 1 major (404 tests for GET/{id} and PATCH) and 5 minors (GET/{id} 200, PATCH 403, DENTIST 403, PATCH 409, AC3 upper bound) — all addressed with 6 new tests + 1 fixture. All 4 quality gates green (ruff ✓, ruff format ✓, mypy ✓, pytest 33 passed). 1 nit: PATCH 422 not explicitly tested at API seam (covered by shared `ServiceDuration` schema type). No implementation changes in fix commit.

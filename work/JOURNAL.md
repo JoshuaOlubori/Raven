@@ -34,7 +34,16 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-05 12:35 | - | T-003 | status -> in-review |
 | 2026-10-05 12:35 | - | - | T-003 changes-requested fixes committed (c6e7dbe): 5 new tests (404 paths, DENTIST sub-case, 401 on staff endpoints, hardened list-filter assertion), 22 tests green, all 4 quality gates pass -> in-review |
 | 2026-10-05 12:52 | - | T-003 | status -> done |
-| 2026-10-05 12:52 | - | T-003 | review round 2: approve, 0B/0M/1m/3n � all round-1 findings addressed, gates green |
+| 2026-10-05 12:52 | - | T-003 | review round 2: approve, 0B/0M/1m/3n � all round-1 findings addressed, gates green |
 | 2026-10-05 13:46 | - | T-004 | status -> in-progress |
 | 2026-10-05 14:23 | - | T-004 | status -> in-review |
 | 2026-10-05 14:23 | build | - | T-004 built: ServiceDuration constrained type, DentalService model, ServiceCatalog domain service (create/get/list/update with name-uniqueness + existence guards), 4 endpoints (POST Admin, GET list + GET /{id} any staff, PATCH Admin), 5 tests (schema unit + 4 API). All 4 quality gates green (27 passed). -> in-review |
+| 2026-10-05 15:10 | review | T-004 | T-004 round 1: changes-requested, 0B/1M/5m/0n — missing 404 tests for GET/{id} and PATCH (major); 5 minors (AC3 upper bound, AC2 edit/DENTIST sub-cases, GET/{id} 200, PATCH 409) |
+| 2026-10-05 15:10 | - | T-004 | status -> in-progress |
+| 2026-10-05 15:30 | build | T-004 | T-004 changes-requested fixes committed (25ba105): 6 new tests (GET/{id} 404, PATCH 404, GET/{id} 200, PATCH 403, DENTIST 403, PATCH 409) + extended schema unit test (AC3 upper bound) + dentist_staff fixture. No implementation changes. All 4 quality gates green (33 passed). -> in-review |
+| 2026-10-05 15:35 | review | T-004 | T-004 round 2: approve, 0B/0M/0m/1n — all round-1 findings resolved. PATCH 422 nit optional. |
+| 2026-10-05 15:35 | - | T-004 | status -> done |
+| 2026-10-05 14:44 | - | T-004 | status -> changes-requested |
+| 2026-10-05 14:44 | - | T-004 | review round 1: changes-requested, 1B/5m/0n � missing 404 tests for GET/{id} and PATCH (major); 5 minors (AC3 upper bound, AC2 edit/DENTIST sub-cases, GET/{id} 200, PATCH 409) |
+| 2026-10-05 15:02 | - | T-004 | status -> in-progress |
+| 2026-10-05 15:10 | - | T-004 | status -> in-review |
