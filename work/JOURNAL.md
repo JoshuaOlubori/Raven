@@ -16,3 +16,5 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-03 21:55 | - | T-001 | status -> done |
 | 2026-10-05 09:16 | - | T-002 | status -> in-progress |
 | 2026-10-05 09:45 | build | T-002 | T-002 built: Staff model, AuthService (Argon2id + HS256 JWT), auth router (/token, /me), 5 tests green, all 4 quality gates pass -> in-review |
+| 2026-10-05 09:59 | - | T-002 | status -> in-review |
+| 2026-10-05 09:59 | build | - | T-002 built and committed (39caac5) |

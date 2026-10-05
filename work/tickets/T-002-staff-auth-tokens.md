@@ -1,7 +1,7 @@
 ---
 id: T-002
 title: Staff authentication and token issuance
-status: in-progress
+status: in-review
 mode: AFK
 blocked_by: T-001
 spec_refs: specs/01-auth-staff.md#2-layer-1, specs/01-auth-staff.md#3-layer-2, specs/01-auth-staff.md#4-layer-3
