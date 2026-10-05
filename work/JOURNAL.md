@@ -48,3 +48,9 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-05 15:02 | - | T-004 | status -> in-progress |
 | 2026-10-05 15:10 | - | T-004 | status -> in-review |
 | 2026-10-05 16:14 | - | T-005 | status -> in-progress |
+| 2026-10-05 16:45 | - | T-005 | status -> in-review |
+| 2026-10-05 16:45 | build | - | T-005 built: Patient model, schemas (PhoneStr, PatientCreate/Update/Read with computed fullName, PatientPage), repository (search+pagination), PatientService, 5 RBAC-guarded endpoints. 7 tests (6 API + 1 schema unit), 40 total, all 4 quality gates green. Committed as 0204012. |
+| 2026-10-05 20:41 | - | T-005 | review round 1: changes-requested, 1B/4M/0m/1n |
+| 2026-10-05 20:42 | - | T-005 | status -> changes-requested |
+| 2026-10-05 21:50 | - | T-005 | status -> in-review |
+| 2026-10-05 22:05 | - | T-005 | Addressed T-005-review-1 findings: added 7 tests (404 failure paths for GET/PATCH/DELETE non-existent patient, DENTIST 403 on write endpoints, GET/PATCH 200 happy paths, PATCH 422 future DOB) and documented get_current_user guard pattern in Spec 02 §4. All quality gates green (ruff, format, mypy, 47 tests). |

@@ -6,6 +6,7 @@ drawn from the PRD and spec, never from the implementation under test.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Callable
 from uuid import UUID
 
@@ -217,3 +218,207 @@ async def test_unauthenticated_request_rejected_401(
     response = await client.get("/api/v1/patients/")
 
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Review round 1 — failure paths (404 / 403) and happy paths (200)
+# Addressed per T-005-review-1 findings.
+# ---------------------------------------------------------------------------
+
+
+async def test_get_nonexistent_patient_returns_404(
+    admin_staff: Staff,
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """Spec 02 §4/§7: GET /patients/{id} non-existent UUID → 404 PATIENT_NOT_FOUND."""
+    headers = auth_headers(admin_staff.id, admin_staff.role)
+
+    response = await client.get(
+        f"/api/v1/patients/{uuid.uuid4()}",
+        headers=headers,
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["error"] == "PATIENT_NOT_FOUND"
+
+
+async def test_patch_nonexistent_patient_returns_404(
+    admin_staff: Staff,
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """Spec 02 §4/§7: PATCH /patients/{id} non-existent → 404 PATIENT_NOT_FOUND."""
+    headers = auth_headers(admin_staff.id, admin_staff.role)
+
+    response = await client.patch(
+        f"/api/v1/patients/{uuid.uuid4()}",
+        headers=headers,
+        json={"medicalAlerts": "Updated alert"},
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["error"] == "PATIENT_NOT_FOUND"
+
+
+async def test_delete_nonexistent_patient_returns_404(
+    admin_staff: Staff,
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """Spec 02 §4/§7: DELETE /patients/{id} non-existent → 404 PATIENT_NOT_FOUND."""
+    headers = auth_headers(admin_staff.id, admin_staff.role)
+
+    response = await client.delete(
+        f"/api/v1/patients/{uuid.uuid4()}",
+        headers=headers,
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["error"] == "PATIENT_NOT_FOUND"
+
+
+async def test_dentist_rejected_from_patient_write_403(
+    dentist_staff: Staff,
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """Spec 02 §4 authz matrix: DENTIST is rejected from POST, PATCH, DELETE → 403."""
+    headers = auth_headers(dentist_staff.id, dentist_staff.role)
+    phantom_id = str(uuid.uuid4())
+
+    # DENTIST cannot create a patient
+    create_resp = await client.post(
+        "/api/v1/patients/",
+        headers=headers,
+        json={
+            "firstName": "Jane",
+            "lastName": "Doe",
+            "dateOfBirth": "2000-01-15",
+            "phone": "555-123-4567",
+        },
+    )
+    assert create_resp.status_code == 403
+    assert create_resp.json()["error"] == "RBAC_FORBIDDEN"
+
+    # DENTIST cannot PATCH a patient
+    patch_resp = await client.patch(
+        f"/api/v1/patients/{phantom_id}",
+        headers=headers,
+        json={"medicalAlerts": "Updated alert"},
+    )
+    assert patch_resp.status_code == 403
+    assert patch_resp.json()["error"] == "RBAC_FORBIDDEN"
+
+    # DENTIST cannot soft-delete a patient
+    delete_resp = await client.delete(
+        f"/api/v1/patients/{phantom_id}",
+        headers=headers,
+    )
+    assert delete_resp.status_code == 403
+    assert delete_resp.json()["error"] == "RBAC_FORBIDDEN"
+
+
+async def test_get_patient_by_id_200(
+    receptionist_staff: Staff,
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """Spec 02 §4: GET /patients/{id} returns saved patient with full data (200)."""
+    headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+
+    create_resp = await client.post(
+        "/api/v1/patients/",
+        headers=headers,
+        json={
+            "firstName": "Alice",
+            "lastName": "Smith",
+            "dateOfBirth": "1990-05-20",
+            "phone": "555-111-2222",
+            "medicalAlerts": "Diabetes",
+        },
+    )
+    assert create_resp.status_code == 201
+    patient_id = create_resp.json()["id"]
+
+    response = await client.get(
+        f"/api/v1/patients/{patient_id}",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == patient_id
+    assert body["fullName"] == "Alice Smith"
+    assert body["medicalAlerts"] == "Diabetes"
+
+
+async def test_update_patient_200(
+    admin_staff: Staff,
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """Spec 02 §4: PATCH /patients/{id} updates fields, returns updated patient."""
+    headers = auth_headers(admin_staff.id, admin_staff.role)
+
+    create_resp = await client.post(
+        "/api/v1/patients/",
+        headers=headers,
+        json={
+            "firstName": "Bob",
+            "lastName": "Jones",
+            "dateOfBirth": "1980-10-10",
+            "phone": "555-333-4444",
+            "medicalAlerts": "Asthma",
+        },
+    )
+    assert create_resp.status_code == 201
+    patient_id = create_resp.json()["id"]
+
+    response = await client.patch(
+        f"/api/v1/patients/{patient_id}",
+        headers=headers,
+        json={
+            "firstName": "Robert",
+            "medicalAlerts": "Asthma and penicillin allergy",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == patient_id
+    assert body["fullName"] == "Robert Jones"
+    assert body["medicalAlerts"] == "Asthma and penicillin allergy"
+
+
+async def test_patch_future_dob_rejected_422(
+    admin_staff: Staff,
+    auth_headers: Callable[[UUID, str], dict[str, str]],
+    client: AsyncClient,
+) -> None:
+    """Spec 02 §2: PATCH future date_of_birth → 422 (PatientUpdate validator)."""
+    headers = auth_headers(admin_staff.id, admin_staff.role)
+
+    create_resp = await client.post(
+        "/api/v1/patients/",
+        headers=headers,
+        json={
+            "firstName": "Carol",
+            "lastName": "White",
+            "dateOfBirth": "1990-01-01",
+            "phone": "555-555-6666",
+        },
+    )
+    assert create_resp.status_code == 201
+    patient_id = create_resp.json()["id"]
+
+    response = await client.patch(
+        f"/api/v1/patients/{patient_id}",
+        headers=headers,
+        json={"dateOfBirth": "2099-12-31"},
+    )
+
+    assert response.status_code == 422

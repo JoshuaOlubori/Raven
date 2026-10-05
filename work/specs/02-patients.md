@@ -60,10 +60,12 @@ async def soft_delete_patient(session: AsyncSession, patient: Patient) -> Patien
 | Method | Path | Request | Response | Success | Errors | Guard | Covers |
 |---|---|---|---|---|---|---|---|
 | `POST` | `/api/v1/patients` | `PatientCreate` | `PatientRead` | 201 | 401, 403, 422 | `require_roles("ADMIN", "RECEPTIONIST")` | R-3 |
-| `GET` | `/api/v1/patients` | Query: `search: str | None`, `page: int = 1`, `size: int = 50` | `PatientPage` | 200 | 401, 403 | `require_roles("ADMIN", "RECEPTIONIST", "DENTIST")` | R-4 |
-| `GET` | `/api/v1/patients/{patient_id}` | Path: `patient_id: UUID` | `PatientRead` | 200 | 401, 403, 404 | `require_roles("ADMIN", "RECEPTIONIST", "DENTIST")` | R-4 |
+| `GET` | `/api/v1/patients` | Query: `search: str | None`, `page: int = 1`, `size: int = 50` | `PatientPage` | 200 | 401, 403 | `Depends(get_current_user)`¹ | R-4 |
+| `GET` | `/api/v1/patients/{patient_id}` | Path: `patient_id: UUID` | `PatientRead` | 200 | 401, 403, 404 | `Depends(get_current_user)`¹ | R-4 |
 | `PATCH` | `/api/v1/patients/{patient_id}` | `PatientUpdate` | `PatientRead` | 200 | 401, 403, 404, 422 | `require_roles("ADMIN", "RECEPTIONIST")` | R-3 |
 | `DELETE` | `/api/v1/patients/{patient_id}` | Path: `patient_id: UUID` | `None` (204) | 204 | 401, 403, 404 | `require_roles("ADMIN", "RECEPTIONIST")` | R-5 |
+
+¹ `Depends(get_current_user)` is the accepted guard for all-staff read endpoints. It is behaviourally equivalent to `require_roles("ADMIN", "RECEPTIONIST", "DENTIST")` because `StaffRole = Literal["ADMIN", "RECEPTIONIST", "DENTIST"]` — any authenticated, active staff member is one of these roles, so the role-check can never raise 403. This pattern is established by T-004 (services router) and applied consistently across read-only GET endpoints.
 
 ### Authorization Matrix
 | Action | Role / Permission | Row-Level Rule |
