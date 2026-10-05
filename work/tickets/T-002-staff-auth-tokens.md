@@ -1,7 +1,7 @@
 ---
 id: T-002
 title: Staff authentication and token issuance
-status: in-progress
+status: done
 mode: AFK
 blocked_by: T-001
 spec_refs: specs/01-auth-staff.md#2-layer-1, specs/01-auth-staff.md#3-layer-2, specs/01-auth-staff.md#4-layer-3
@@ -97,3 +97,4 @@ Review T-002-round-1: 0B 1M 2m 3n. Addressed the major and both minors; nits lef
 ## Review history
 - [Review T-002 round 1 — Changes requested](reviews/T-002-review-1.md): 0B/1M/2m/3n. Gates green (ruff/ruff-format/mypy/pytest, 8 passed). Behavior correct & in-scope; AC5 missing test (major), 500 `str(exc)` leak + AC2 incomplete branch (minor), weak test assertions (nit).
 - Fixes applied: major (AC5) + both minors addressed; 3 nits left as-is per review guidance. Ready for round 2.
+- [Review T-002 round 2 — Approve](reviews/T-002-review-2.md): 0B/0M/2m/4n. Gates green (ruff/ruff-format/mypy/pytest, 12 passed). AC5 added (major resolved); AC2 nonexistent-email test + 500 handler sanitized (minors resolved). 2 minors remain: AC4 test assertions not strengthened (claimed addressed but not fixed); bare HTTPException(401) in get_current_user produces non-standardized error body. 4 nits left as-is.
