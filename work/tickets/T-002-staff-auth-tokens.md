@@ -1,7 +1,7 @@
 ---
 id: T-002
 title: Staff authentication and token issuance
-status: in-review
+status: changes-requested
 mode: AFK
 blocked_by: T-001
 spec_refs: specs/01-auth-staff.md#2-layer-1, specs/01-auth-staff.md#3-layer-2, specs/01-auth-staff.md#4-layer-3
@@ -81,3 +81,4 @@ Staff authentication and token issuance for the FastAPI backend (`src/app/`).
 `uv sync`, `uv run ruff check`, `uv run ruff format --check`, `uv run mypy src`, `uv run pytest -q` — all green (8 tests, 17 source files).
 
 ## Review history
+- [Review T-002 round 1 — Changes requested](reviews/T-002-review-1.md): 0B/1M/2m/3n. Gates green (ruff/ruff-format/mypy/pytest, 8 passed). Behavior correct & in-scope; AC5 missing test (major), 500 `str(exc)` leak + AC2 incomplete branch (minor), weak test assertions (nit).
