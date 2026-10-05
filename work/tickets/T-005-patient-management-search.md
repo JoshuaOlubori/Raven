@@ -115,7 +115,7 @@ T-004 services-router pattern. Resolved by documenting the accepted pattern in
 Spec 02 §4 footnote ¹ rather than changing the code, keeping the codebase
 consistent.
 
-**Commit:** `cf5dfce` — `T-005: Address review round 1 — test coverage for failure paths and spec clarification`
+**Commit:** `58792d1` — `T-005: Address review round 1 — test coverage for failure paths and spec clarification`
 
 ## Review history
 | Round | Date | Reviewer | Verdict | Link |
