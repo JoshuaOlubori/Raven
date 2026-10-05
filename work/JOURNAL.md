@@ -47,3 +47,4 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-05 14:44 | - | T-004 | review round 1: changes-requested, 1B/5m/0n � missing 404 tests for GET/{id} and PATCH (major); 5 minors (AC3 upper bound, AC2 edit/DENTIST sub-cases, GET/{id} 200, PATCH 409) |
 | 2026-10-05 15:02 | - | T-004 | status -> in-progress |
 | 2026-10-05 15:10 | - | T-004 | status -> in-review |
+| 2026-10-05 16:14 | - | T-005 | status -> in-progress |

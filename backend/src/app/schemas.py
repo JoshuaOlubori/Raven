@@ -7,11 +7,18 @@ defined in Spec 01 §2 (Layer 1 — Contracts).
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Annotated, Literal
+from datetime import date, datetime
+from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    computed_field,
+    model_validator,
+)
 
 # ---------------------------------------------------------------------------
 # Shared constrained types (Spec 01 §2 — Layer 1)
@@ -40,6 +47,12 @@ EmailStr = Annotated[
 PasswordStr = Annotated[str, Field(min_length=8, max_length=128)]
 NonEmptyStr = Annotated[
     str, BeforeValidator(_strip), Field(min_length=1, max_length=100)
+]
+# Spec 02 §2 — Layer 1: PhoneStr for patient contact fields.
+PhoneStr = Annotated[
+    str,
+    BeforeValidator(_strip),
+    Field(min_length=7, max_length=20, pattern=r"^\+?[0-9\s\-()]+$"),
 ]
 ServiceDuration = Annotated[
     int,
@@ -147,3 +160,101 @@ class ServiceUpdate(BaseModel):
         default=None, alias="durationMinutes"
     )
     is_active: bool | None = Field(default=None, alias="isActive")
+
+
+# ---------------------------------------------------------------------------
+# Patient schemas (Spec 02 §2 — Layer 1)
+# ---------------------------------------------------------------------------
+
+
+class PatientCreate(BaseModel):
+    """Patient registration input (Receptionist, Admin) — Spec 02 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    first_name: NonEmptyStr = Field(alias="firstName")
+    last_name: NonEmptyStr = Field(alias="lastName")
+    date_of_birth: date = Field(alias="dateOfBirth")
+    phone: PhoneStr
+    email: EmailStr | None = None
+    emergency_contact_name: str | None = Field(
+        default=None, alias="emergencyContactName"
+    )
+    emergency_contact_phone: PhoneStr | None = Field(
+        default=None, alias="emergencyContactPhone"
+    )
+    medical_alerts: str | None = Field(default=None, alias="medicalAlerts")
+
+    @model_validator(mode="after")
+    def _dob_not_in_future(self) -> Self:
+        """Reject dates of birth in the future (Spec 02 §2)."""
+        if self.date_of_birth > date.today():
+            raise ValueError("date_of_birth cannot be in the future")
+        return self
+
+
+class PatientUpdate(BaseModel):
+    """Partial patient profile update input — Spec 02 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    first_name: NonEmptyStr | None = Field(default=None, alias="firstName")
+    last_name: NonEmptyStr | None = Field(default=None, alias="lastName")
+    date_of_birth: date | None = Field(default=None, alias="dateOfBirth")
+    phone: PhoneStr | None = None
+    email: EmailStr | None = None
+    emergency_contact_name: str | None = Field(
+        default=None, alias="emergencyContactName"
+    )
+    emergency_contact_phone: PhoneStr | None = Field(
+        default=None, alias="emergencyContactPhone"
+    )
+    medical_alerts: str | None = Field(default=None, alias="medicalAlerts")
+
+    @model_validator(mode="after")
+    def _dob_not_in_future(self) -> Self:
+        """Reject future dates of birth when provided (Spec 02 §2)."""
+        if self.date_of_birth is not None and self.date_of_birth > date.today():
+            raise ValueError("date_of_birth cannot be in the future")
+        return self
+
+
+class PatientRead(BaseModel):
+    """Public patient representation with camelCase aliases (Spec 02 §2)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: UUID
+    first_name: NonEmptyStr = Field(alias="firstName")
+    last_name: NonEmptyStr = Field(alias="lastName")
+    date_of_birth: date = Field(alias="dateOfBirth")
+    phone: PhoneStr
+    email: EmailStr | None = None
+    emergency_contact_name: str | None = Field(
+        default=None, alias="emergencyContactName"
+    )
+    emergency_contact_phone: PhoneStr | None = Field(
+        default=None, alias="emergencyContactPhone"
+    )
+    medical_alerts: str | None = Field(default=None, alias="medicalAlerts")
+    is_active: bool = Field(alias="isActive")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+
+    @computed_field(alias="fullName")  # type: ignore[prop-decorator]
+    @property
+    def full_name(self) -> str:
+        """Computed full name from first and last name (Spec 02 §2)."""
+        return f"{self.first_name} {self.last_name}"
+
+
+class PatientPage(BaseModel):
+    """Paginated patient search output — Spec 02 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    items: list[PatientRead]
+    total: int
+    page: int
+    size: int
+    pages: int

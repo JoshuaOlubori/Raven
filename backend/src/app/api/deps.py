@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.db.session import SessionLocal
 from app.services.auth_service import AuthService
+from app.services.patient_service import PatientService
 from app.services.service_catalog import ServiceCatalog
 
 # ---------------------------------------------------------------------------
@@ -73,3 +74,16 @@ def get_service_catalog(session: DbSessionDep) -> ServiceCatalog:
 
 
 ServiceCatalogDep = Annotated[ServiceCatalog, Depends(get_service_catalog)]
+
+
+# ---------------------------------------------------------------------------
+# Patient service dependency (Spec 02 §4 — Layer 3)
+# ---------------------------------------------------------------------------
+
+
+def get_patient_service(session: DbSessionDep) -> PatientService:
+    """Construct a ``PatientService`` with the request-scoped session."""
+    return PatientService(session)
+
+
+PatientServiceDep = Annotated[PatientService, Depends(get_patient_service)]

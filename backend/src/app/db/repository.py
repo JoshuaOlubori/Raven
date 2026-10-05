@@ -6,11 +6,13 @@ objects.  No business logic lives here — queries only.
 
 from __future__ import annotations
 
+from datetime import date
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.patient import Patient
 from app.models.service import DentalService
 from app.models.staff import Staff
 
@@ -139,3 +141,101 @@ async def update_service(
     await session.flush()
     await session.refresh(service)
     return service
+
+
+# ---------------------------------------------------------------------------
+# Patient repository functions (Spec 02 §3 — Layer 2)
+# ---------------------------------------------------------------------------
+
+
+async def get_patient_by_id(session: AsyncSession, patient_id: UUID) -> Patient | None:
+    """Fetch a single patient by primary key."""
+    return await session.get(Patient, patient_id)
+
+
+async def list_patients(
+    session: AsyncSession,
+    search: str | None = None,
+    include_inactive: bool = False,
+    page: int = 1,
+    size: int = 50,
+) -> tuple[list[Patient], int]:
+    """Return patients with optional case-insensitive search and pagination.
+
+    Active-only is the default; pass ``include_inactive=True`` to see soft-deleted
+    records (Spec 02 §3, §6).
+    """
+    stmt = select(Patient)
+    if not include_inactive:
+        stmt = stmt.where(Patient.is_active.is_(True))
+    if search:
+        pattern = f"%{search}%"
+        stmt = stmt.where(
+            or_(
+                Patient.first_name.ilike(pattern),
+                Patient.last_name.ilike(pattern),
+                Patient.phone.ilike(pattern),
+            )
+        )
+
+    # Total count without ORDER BY / LIMIT / OFFSET (Spec 02 §2 — PatientPage).
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total: int = await session.scalar(count_stmt)  # type: ignore[assignment]
+
+    offset = (page - 1) * size
+    paged_stmt = (
+        stmt.order_by(Patient.last_name, Patient.first_name).offset(offset).limit(size)
+    )
+    result = await session.execute(paged_stmt)
+    patients = list(result.scalars().all())
+    return patients, total
+
+
+async def create_patient(
+    session: AsyncSession,
+    *,
+    first_name: str,
+    last_name: str,
+    date_of_birth: date,
+    phone: str,
+    email: str | None = None,
+    emergency_contact_name: str | None = None,
+    emergency_contact_phone: str | None = None,
+    medical_alerts: str | None = None,
+) -> Patient:
+    """Insert a new patient and return the persisted object."""
+    patient = Patient(
+        first_name=first_name,
+        last_name=last_name,
+        date_of_birth=date_of_birth,
+        phone=phone,
+        email=email,
+        emergency_contact_name=emergency_contact_name,
+        emergency_contact_phone=emergency_contact_phone,
+        medical_alerts=medical_alerts,
+    )
+    session.add(patient)
+    await session.flush()
+    await session.refresh(patient)
+    return patient
+
+
+async def update_patient(
+    session: AsyncSession, patient: Patient, **kwargs: object
+) -> Patient:
+    """Apply keyword field updates to a patient row and return the refreshed object."""
+    for key, value in kwargs.items():
+        setattr(patient, key, value)
+    session.add(patient)
+    await session.flush()
+    await session.refresh(patient)
+    return patient
+
+
+async def soft_delete_patient(session: AsyncSession, patient: Patient) -> Patient:
+    """Mark a patient inactive rather than running a SQL DELETE (R-5, Spec 02 §5)."""
+    patient.is_active = False
+    session.add(patient)
+    await session.flush()
+    await session.refresh(patient)
+    return patient

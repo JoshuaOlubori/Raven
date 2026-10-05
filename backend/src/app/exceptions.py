@@ -61,3 +61,11 @@ class ServiceNameExistsError(DomainError):
     error_code = "SERVICE_NAME_EXISTS"
     message = "A service with this name already exists"
     status_code = 409
+
+
+class PatientNotFoundError(DomainError):
+    """Raised when a patient lookup by ID finds no match (Spec 02 §7)."""
+
+    error_code = "PATIENT_NOT_FOUND"
+    message = "Patient not found"
+    status_code = 404
