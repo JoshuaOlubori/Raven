@@ -45,3 +45,19 @@ class ForbiddenError(DomainError):
     error_code = "RBAC_FORBIDDEN"
     message = "Insufficient role"
     status_code = 403
+
+
+class ServiceNotFoundError(DomainError):
+    """Raised when a dental service lookup by ID finds no match (Spec 03 §7)."""
+
+    error_code = "SERVICE_NOT_FOUND"
+    message = "Service not found"
+    status_code = 404
+
+
+class ServiceNameExistsError(DomainError):
+    """Raised when a service name is already in use (Spec 03 §7)."""
+
+    error_code = "SERVICE_NAME_EXISTS"
+    message = "A service with this name already exists"
+    status_code = 409

@@ -41,6 +41,14 @@ PasswordStr = Annotated[str, Field(min_length=8, max_length=128)]
 NonEmptyStr = Annotated[
     str, BeforeValidator(_strip), Field(min_length=1, max_length=100)
 ]
+ServiceDuration = Annotated[
+    int,
+    Field(
+        gt=0,
+        le=480,
+        description="Duration in minutes (e.g. 15, 30, 45, 60, 90)",
+    ),
+]
 
 # ---------------------------------------------------------------------------
 # Auth schemas (Spec 01 §2 — Layer 1)
@@ -96,4 +104,46 @@ class StaffUpdate(BaseModel):
 
     full_name: NonEmptyStr | None = Field(default=None, alias="fullName")
     role: StaffRole | None = None
+    is_active: bool | None = Field(default=None, alias="isActive")
+
+
+# ---------------------------------------------------------------------------
+# Service schemas (Spec 03 §2 — Layer 1)
+# ---------------------------------------------------------------------------
+
+
+class ServiceCreate(BaseModel):
+    """Dental service (procedure) creation input — Spec 03 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: NonEmptyStr
+    description: str | None = None
+    duration_minutes: ServiceDuration = Field(alias="durationMinutes")
+    is_active: bool = Field(default=True, alias="isActive")
+
+
+class ServiceRead(BaseModel):
+    """Public service representation with camelCase aliases (Spec 03 §2)."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: UUID
+    name: NonEmptyStr
+    description: str | None
+    duration_minutes: int = Field(alias="durationMinutes")
+    is_active: bool = Field(alias="isActive")
+    created_at: datetime = Field(alias="createdAt")
+
+
+class ServiceUpdate(BaseModel):
+    """Partial service update input — Spec 03 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: NonEmptyStr | None = None
+    description: str | None = None
+    duration_minutes: ServiceDuration | None = Field(
+        default=None, alias="durationMinutes"
+    )
     is_active: bool | None = Field(default=None, alias="isActive")

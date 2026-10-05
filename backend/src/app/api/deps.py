@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.db.session import SessionLocal
 from app.services.auth_service import AuthService
+from app.services.service_catalog import ServiceCatalog
 
 # ---------------------------------------------------------------------------
 # Database session (Standard §4)
@@ -59,3 +60,16 @@ def get_auth_service(
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+# ---------------------------------------------------------------------------
+# Service catalog dependency (Spec 03 §4 — Layer 3)
+# ---------------------------------------------------------------------------
+
+
+def get_service_catalog(session: DbSessionDep) -> ServiceCatalog:
+    """Construct a ``ServiceCatalog`` with the request-scoped session."""
+    return ServiceCatalog(session)
+
+
+ServiceCatalogDep = Annotated[ServiceCatalog, Depends(get_service_catalog)]

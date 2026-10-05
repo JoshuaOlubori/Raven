@@ -11,6 +11,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.service import DentalService
 from app.models.staff import Staff
 
 
@@ -73,3 +74,68 @@ async def update_staff(
     await session.flush()
     await session.refresh(staff)
     return staff
+
+
+# ---------------------------------------------------------------------------
+# Service repository functions (Spec 03 §3 — Layer 2)
+# ---------------------------------------------------------------------------
+
+
+async def get_service_by_id(
+    session: AsyncSession, service_id: UUID
+) -> DentalService | None:
+    """Fetch a single dental service by primary key."""
+    return await session.get(DentalService, service_id)
+
+
+async def get_service_by_name(session: AsyncSession, name: str) -> DentalService | None:
+    """Fetch a single dental service by unique name."""
+    result = await session.scalars(
+        select(DentalService).where(DentalService.name == name)
+    )
+    return result.one_or_none()
+
+
+async def create_service(
+    session: AsyncSession,
+    *,
+    name: str,
+    description: str | None,
+    duration_minutes: int,
+) -> DentalService:
+    """Insert a new dental service and return the persisted object."""
+    service = DentalService(
+        name=name,
+        description=description,
+        duration_minutes=duration_minutes,
+    )
+    session.add(service)
+    await session.flush()
+    await session.refresh(service)
+    return service
+
+
+async def list_services(
+    session: AsyncSession,
+    active_only: bool = True,
+) -> list[DentalService]:
+    """Return services, optionally filtered to active only (Spec 03 §4)."""
+    query = select(DentalService)
+    if active_only:
+        query = query.where(DentalService.is_active.is_(True))
+    result = await session.execute(query)
+    return list(result.scalars().all())
+
+
+async def update_service(
+    session: AsyncSession,
+    service: DentalService,
+    **kwargs: object,
+) -> DentalService:
+    """Apply keyword field updates to a service row and return the refreshed object."""
+    for key, value in kwargs.items():
+        setattr(service, key, value)
+    session.add(service)
+    await session.flush()
+    await session.refresh(service)
+    return service
