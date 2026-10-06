@@ -1,12 +1,12 @@
 ---
 id: T-005
 title: Patient profile management, search, and soft delete
-status: in-review
+status: done
 mode: AFK
 blocked_by: T-003
 spec_refs: specs/02-patients.md#2-layer-1, specs/02-patients.md#3-layer-2, specs/02-patients.md#4-layer-3
 covers: R-3, R-4, R-5, NFR-6
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 ## Outcome
@@ -121,4 +121,4 @@ consistent.
 | Round | Date | Reviewer | Verdict | Link |
 |---|---|---|---|---|
 | 1 | 2026-10-05 | sdd-ticket-review | Changes requested (1B/4M/0m/1n) | [T-005-review-1](work/reviews/T-005-review-1.md) |
-| 2 | 2026-10-05 | sdd-implement | Pending review | — |
+| 2 | 2026-10-05 | sdd-ticket-review | Approve (0B/0M/0m/0n) | [T-005-review-2](work/reviews/T-005-review-2.md) |

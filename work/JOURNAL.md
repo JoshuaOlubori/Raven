@@ -61,3 +61,10 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-06 12:38 | - | T-006 | status -> in-progress |
 | 2026-10-06 12:55 | build | T-006 | T-006 built: WorkingShift/TimeOffBlock models, schedule service (overlap validation, ABAC), 6 endpoints, 14 tests (12 API + 2 schema). All 4 quality gates green (61 tests). -> in-review |
 | 2026-10-06 12:55 | - | T-006 | status -> in-review |
+| 2026-10-06 14:30 | - | T-006 | review round 1: approve, 0B/0M/1m/0n |
+| 2026-10-06 14:30 | - | T-006 | status -> done |
+| 2026-10-06 22:56 | - | T-007 | status -> in-review |
+| 2026-10-06 23:09 | - | T-006 | status -> done |
+| 2026-10-06 23:09 | - | T-007 | status -> changes-requested |
+| 2026-10-06 23:10 | - | T-006 | review round 2: approve, 0B/0M/0m/0n |
+| 2026-10-06 23:10 | - | T-007 | review round 2: changes requested, 2B/2M/4m/2n |

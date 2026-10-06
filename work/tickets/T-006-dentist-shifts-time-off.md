@@ -1,7 +1,7 @@
 ---
 id: T-006
 title: Dentist recurring shifts and time-off blocks
-status: in-review
+status: done
 mode: AFK
 blocked_by: T-003
 spec_refs: specs/04-schedules.md#2-layer-1, specs/04-schedules.md#3-layer-2, specs/04-schedules.md#4-layer-3
@@ -83,3 +83,5 @@ Normalize all timestamps to UTC in the database, while interpreting shift times 
 - ✅ AC5: Dentist cannot modify peer time-off → 403 SCHEDULE_FORBIDDEN (test_dentist_cannot_modify_peer_time_off_403, test_dentist_cannot_delete_peer_time_off_403)
 
 ## Review history
+- Round 1 (2026-10-06): approve, 0B/0M/1m/0n — mypy alias/field mismatch in router helpers only
+- Round 2 (2026-10-06): approve, 0B/0M/0m/0n — all gates pass, no findings

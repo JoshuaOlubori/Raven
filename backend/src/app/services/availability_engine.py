@@ -3,7 +3,7 @@
 Pure domain algorithm that computes available booking slots for a dentist
 and service on a given date by subtracting booked appointments and time-off
 blocks from working shifts.  All calculations execute in-memory after
-fetching required data in minimal database roundtrips.
+fetching required data in minimal database roundtrips (service, shifts, time-off).
 """
 
 from __future__ import annotations
@@ -20,9 +20,7 @@ from app.db.repository import (
     list_time_off_blocks,
 )
 from app.models.schedule import WorkingShift
-
-# Slot step constant (15 minutes per Spec 04 §5, Layer 4)
-SLOT_STEP = timedelta(minutes=15)
+from app.utils.datetime_utils import date_to_midnight_local
 
 
 class AvailabilityEngine:
@@ -31,7 +29,12 @@ class AvailabilityEngine:
     Stateless: holds only references to session and settings.  The core
     interval subtraction logic is CPU-only and executes in <2ms per
     provider (NFR-2).
+
+    Attributes:
+        SLOT_STEP: Slot generation step size (15 minutes per Spec 04 §5).
     """
+
+    SLOT_STEP = timedelta(minutes=15)
 
     def __init__(self, session: AsyncSession, settings: Settings) -> None:
         self._session = session
@@ -66,9 +69,7 @@ class AvailabilityEngine:
 
         # 2. Determine weekday in clinic timezone
         # Convert date to datetime at midnight in clinic timezone
-        target_dt = datetime.combine(target_date, time.min).replace(
-            tzinfo=self._clinic_tz
-        )
+        target_dt = date_to_midnight_local(target_date, self._clinic_tz)
         weekday = target_dt.weekday()  # 0=Monday, ..., 6=Sunday
 
         # 3. Fetch shifts for this dentist on this weekday
@@ -156,7 +157,7 @@ class AvailabilityEngine:
                 if not overlaps:
                     slots.append((candidate_start, candidate_end))
 
-                candidate_start += SLOT_STEP
+                candidate_start += self.SLOT_STEP
 
         return slots
 

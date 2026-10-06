@@ -7,7 +7,7 @@ logic lives here — the handler is the *last* stop before the service layer.
 
 from __future__ import annotations
 
-from datetime import date, datetime, time
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
@@ -23,6 +23,7 @@ from app.schemas import (
     WorkingShiftCreate,
     WorkingShiftRead,
 )
+from app.utils.datetime_utils import date_to_midnight_local
 
 if TYPE_CHECKING:
     from app.models.schedule import TimeOffBlock, WorkingShift
@@ -162,10 +163,10 @@ async def list_time_off_endpoint(
     (All staff) (R-8, Spec 04 §4).
     """
     # Convert date to datetime at start/end of day in UTC
-    from datetime import UTC, time
+    from datetime import UTC
 
-    start_range = datetime.combine(start_date, time.min, tzinfo=UTC)
-    end_range = datetime.combine(end_date, time.max, tzinfo=UTC)
+    start_range = datetime.combine(start_date, datetime.min.time(), tzinfo=UTC)
+    end_range = datetime.combine(end_date, datetime.max.time(), tzinfo=UTC)
 
     blocks = await service.list_time_off(dentist_id, start_range, end_range)
     return [_time_off_read(b) for b in blocks]
@@ -255,9 +256,7 @@ async def get_availability_endpoint(
     else:
         # Query all dentists with shifts on the target weekday
         # Get weekday in clinic timezone
-        target_dt_tz = datetime.combine(target_date, time.min).replace(
-            tzinfo=engine._clinic_tz
-        )
+        target_dt_tz = date_to_midnight_local(target_date, engine._clinic_tz)
         weekday = target_dt_tz.weekday()
 
         shifts = await list_shifts_by_day(engine._session, weekday, None)

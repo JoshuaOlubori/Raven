@@ -6,7 +6,7 @@ and spec, never from the implementation under test.
 
 from __future__ import annotations
 
-from datetime import time
+from datetime import time, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -81,12 +81,18 @@ async def test_availability_endpoint_success_200(
     auth_headers: callable,
     client: AsyncClient,
 ) -> None:
-    """R-9: GET /availability returns 200 with slots array populated
-    with start/end times for a dentist with shifts.
+    """R-9: GET /availability returns 200 with exact expected slots.
+
+    Given a dentist working 09:00-12:00 with a 45-minute service and
+    15-minute slot steps, the spec defines 10 expected slot start times:
+    09:00, 09:15, 09:30, 09:45, 10:00, 10:15, 10:30, 10:45, 11:00, 11:15.
     """
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
     headers = auth_headers(admin_staff.id, admin_staff.role)
 
-    # Query for a Monday (Jan 5, 2026 is a Monday)
+    # Query for a Monday (Jan 5, 2026 is a Monday, non-DST period)
     response = await client.get(
         "/api/v1/schedules/availability",
         headers=headers,
@@ -105,16 +111,48 @@ async def test_availability_endpoint_success_200(
     assert body["durationMinutes"] == 45
     assert "slots" in body
     assert isinstance(body["slots"], list)
-    assert len(body["slots"]) > 0
 
-    # Verify slot structure
-    for slot in body["slots"]:
+    # Verify exact slot count and start times per PRD R-9
+    slots = body["slots"]
+    assert len(slots) == 10
+
+    # Expected start times in clinic timezone (America/New_York)
+    expected_starts = [
+        "09:00:00",
+        "09:15:00",
+        "09:30:00",
+        "09:45:00",
+        "10:00:00",
+        "10:15:00",
+        "10:30:00",
+        "10:45:00",
+        "11:00:00",
+        "11:15:00",
+    ]
+
+    clinic_tz = ZoneInfo("America/New_York")
+    for i, slot in enumerate(slots):
+        # Verify slot structure
         assert "startTime" in slot
         assert "endTime" in slot
         assert "dentistId" in slot
         assert "dentistName" in slot
         assert slot["dentistId"] == str(availability_dentist.id)
         assert slot["dentistName"] == availability_dentist.full_name
+
+        # Parse and verify start time in clinic timezone
+        start_utc = datetime.fromisoformat(slot["startTime"].replace("Z", "+00:00"))
+        start_local = start_utc.astimezone(clinic_tz)
+        assert start_local.strftime("%H:%M:%S") == expected_starts[i]
+
+        # Verify end time = start + 45 minutes
+        end_utc = datetime.fromisoformat(slot["endTime"].replace("Z", "+00:00"))
+        end_local = end_utc.astimezone(clinic_tz)
+        expected_end = (
+            start_local.replace(second=0, microsecond=0)
+            + timedelta(minutes=45)
+        )
+        assert end_local.strftime("%H:%M:%S") == expected_end.strftime("%H:%M:%S")
 
 
 async def test_availability_endpoint_no_shifts_returns_empty(

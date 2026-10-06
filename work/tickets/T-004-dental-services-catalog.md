@@ -1,12 +1,12 @@
 ---
 id: T-004
 title: Dental services catalog management
-status: in-review
+status: done
 mode: AFK
 blocked_by: T-003
 spec_refs: specs/03-services.md#2-layer-1, specs/03-services.md#3-layer-2, specs/03-services.md#4-layer-3
 covers: R-6
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 ## Outcome

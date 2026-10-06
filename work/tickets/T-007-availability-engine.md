@@ -1,12 +1,12 @@
 ---
 id: T-007
 title: Dynamic availability calculation engine
-status: todo
+status: changes-requested
 mode: AFK
 blocked_by: T-004, T-006
 spec_refs: specs/04-schedules.md#2-layer-1, specs/04-schedules.md#4-layer-3, specs/04-schedules.md#5-layer-4
 covers: R-9, NFR-2, NFR-3
-updated: 2026-10-03
+updated: 2026-10-06
 ---
 
 ## Outcome
@@ -70,5 +70,17 @@ Ensure the slot subtraction algorithm operates entirely in-memory after fetching
   - Fixed test issues (missing imports, line lengths, `zip(strict=True)`, trailing newlines)
   - Fixed timezone handling: engine now accepts `date` objects and returns timezone-aware UTC datetimes
   - Fixed test data conflicts by using unique service names
+- Fixed review round 2 issues:
+  - Added exact-value assertions to `test_availability_endpoint_success_200` (10 slots at 15-min intervals per PRD R-9)
+  - Added pure-unit latency benchmark `test_availability_engine_latency_benchmark` testing engine directly
+  - Fixed DST tests to use actual transition days (March 8, Nov 1) with new `sunday_shift` fixture
+  - Fixed `test_dynamic_slots_excludes_time_off_blocks` to test overlapping time-off block (10:00-11:00)
+  - Moved `SLOT_STEP` from module constant to `AvailabilityEngine.SLOT_STEP` class attribute
+  - Updated docstring from "single database roundtrip" to "minimal database roundtrips"
+  - Extracted `datetime.combine(target_date, time.min)` pattern to shared `app.utils.datetime_utils.date_to_midnight_local`
+  - Created `app/utils/` package with `datetime_utils.py`
 
 ## Review history
+- Round 1 (2026-10-06): changes requested, 2B/6M/4m/2n — AC1 untested, ruff failures, test gaps
+- Round 2 (2026-10-06): changes requested, 2B/2M/4m/2n — AC1 depends on T-008, tautological API test, latency test measures HTTP
+- Round 3 (2026-10-06): All blockers/majors addressed; AC1 remains architectural dependency on T-008
