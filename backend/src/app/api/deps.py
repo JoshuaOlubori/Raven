@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings, get_settings
 from app.db.session import SessionLocal
 from app.services.auth_service import AuthService
+from app.services.availability_engine import AvailabilityEngine
 from app.services.patient_service import PatientService
 from app.services.schedule_service import ScheduleService
 from app.services.service_catalog import ServiceCatalog
@@ -101,3 +102,24 @@ def get_schedule_service(session: DbSessionDep) -> ScheduleService:
 
 
 ScheduleServiceDep = Annotated[ScheduleService, Depends(get_schedule_service)]
+
+
+# ---------------------------------------------------------------------------
+# Availability engine dependency (Spec 04 §5 — Layer 4)
+# ---------------------------------------------------------------------------
+
+
+def get_availability_engine(
+    session: DbSessionDep,
+    settings: SettingsDep,
+) -> AvailabilityEngine:
+    """Construct an ``AvailabilityEngine`` with the request-scoped
+    session and settings.
+    """
+    return AvailabilityEngine(
+        session=session,
+        settings=settings,
+    )
+
+
+AvailabilityEngineDep = Annotated[AvailabilityEngine, Depends(get_availability_engine)]

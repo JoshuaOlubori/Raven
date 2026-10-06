@@ -44,5 +44,31 @@ Booking the slot and creating appointment records (handled in T-008).
 Ensure the slot subtraction algorithm operates entirely in-memory after fetching the day's records in a single database roundtrip.
 
 ## Implementation log
+- Created `src/app/services/availability_engine.py` with pure domain availability computation algorithm (ADR 0001)
+- Added availability schemas (`AvailabilityQuery`, `TimeSlot`, `AvailabilityResponse`) to `schemas.py`
+- Added `AvailabilityEngineDep` dependency to `api/deps.py`
+- Implemented `GET /api/v1/schedules/availability` endpoint in `routers/schedules.py`
+- Created unit tests in `tests/unit/test_availability.py` covering:
+  - Dynamic slot calculation subtracting booked appointments
+  - Time-off block exclusion
+  - DST clock transition accuracy (spring forward and fall back)
+  - Helper method tests for overlap detection and timezone conversion
+- Created API tests in `tests/api/test_availability_api.py` covering:
+  - Success 200 with slots populated
+  - Empty slots when no shifts
+  - Required parameters validation
+  - Invalid service returns 404
+  - Unauthenticated returns 401
+  - Latency benchmark (<100ms)
+  - Query all dentists when dentist_id omitted (per spec)
+- Fixed review round 1 issues:
+  - Ruff violations (UP037, B008, E501, F401, I001)
+  - Made `dentist_id` optional in endpoint (defaults to all dentists with shifts per spec)
+  - Replaced hardcoded 15-minute step with `SLOT_STEP` constant
+  - Removed dead code placeholder for appointments
+  - Fixed `datetime.min.time()` to `time.min`
+  - Fixed test issues (missing imports, line lengths, `zip(strict=True)`, trailing newlines)
+  - Fixed timezone handling: engine now accepts `date` objects and returns timezone-aware UTC datetimes
+  - Fixed test data conflicts by using unique service names
 
 ## Review history

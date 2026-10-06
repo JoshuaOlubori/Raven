@@ -1,23 +1,25 @@
-"""Schedule management endpoints (Spec 04 §4 — Layer 3, PRD R-7, R-8).
+"""Schedule management endpoints (Spec 04 §4 — Layer 3, PRD R-7, R-8, R-9).
 
-Thin handlers that receive dependencies, delegate to ``ScheduleService``,
-and return Pydantic response models.  No business logic lives here — the
-handler is the *last* stop before the service layer.
+Thin handlers that receive dependencies, delegate to ``ScheduleService`` and
+``AvailabilityEngine``, and return Pydantic response models.  No business
+logic lives here — the handler is the *last* stop before the service layer.
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
 from app.api.auth import CurrentUserDep, get_current_user, require_roles
-from app.api.deps import ScheduleServiceDep
+from app.api.deps import AvailabilityEngineDep, ScheduleServiceDep
 from app.schemas import (
+    AvailabilityResponse,
     TimeOffBlockCreate,
     TimeOffBlockRead,
+    TimeSlot,
     WorkingShiftCreate,
     WorkingShiftRead,
 )
@@ -187,3 +189,123 @@ async def delete_time_off_endpoint(
         from app.exceptions import StaffNotFoundError
 
         raise StaffNotFoundError()
+
+
+# ---------------------------------------------------------------------------
+# Dynamic Availability (All staff)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/availability",
+    response_model=AvailabilityResponse,
+    dependencies=[Depends(get_current_user)],
+)
+async def get_availability_endpoint(
+    engine: AvailabilityEngineDep,
+    service_id: Annotated[UUID, Query(alias="serviceId")],
+    target_date: Annotated[date, Query(alias="date")],
+    dentist_id: Annotated[UUID | None, Query(alias="dentistId")] = None,
+) -> AvailabilityResponse:
+    """Get dynamically computed available slots for a dentist and service on a date.
+
+    Query params:
+    - dentist_id: Optional UUID of the dentist (defaults to all dentists with shifts)
+    - service_id: Required UUID of the dental service (provides duration)
+    - date: Required target date in CLINIC_TIMEZONE
+
+    Returns AvailabilityResponse with date, service_id, duration_minutes,
+    and slots array. (R-9, Spec 04 §4)
+    """
+    from app.db.repository import (
+        get_service_by_id,
+        get_staff_by_id,
+        list_shifts_by_day,
+    )
+
+    # Validate service exists and get duration
+    service = await get_service_by_id(engine._session, service_id)
+    if service is None:
+        from app.exceptions import ServiceNotFoundError
+
+        raise ServiceNotFoundError()
+
+    duration_minutes = service.duration_minutes
+
+    if dentist_id is not None:
+        # Single dentist query
+        slots_utc = await engine.get_available_slots(
+            dentist_id=dentist_id,
+            service_id=service_id,
+            target_date=target_date,
+        )
+
+        dentist = await get_staff_by_id(engine._session, dentist_id)
+        dentist_name = dentist.full_name if dentist else "Unknown"
+
+        time_slots = [
+            TimeSlot(
+                startTime=start,
+                endTime=end,
+                dentistId=dentist_id,
+                dentistName=dentist_name,
+            )
+            for start, end in slots_utc
+        ]
+    else:
+        # Query all dentists with shifts on the target weekday
+        # Get weekday in clinic timezone
+        target_dt_tz = datetime.combine(target_date, time.min).replace(
+            tzinfo=engine._clinic_tz
+        )
+        weekday = target_dt_tz.weekday()
+
+        shifts = await list_shifts_by_day(engine._session, weekday, None)
+        if not shifts:
+            return AvailabilityResponse(
+                date=target_date,
+                serviceId=service_id,
+                durationMinutes=duration_minutes,
+                slots=[],
+            )
+
+        # Group shifts by dentist and compute slots for each
+        from collections import defaultdict
+
+        shifts_by_dentist: dict[UUID, list] = defaultdict(list)
+        for shift in shifts:
+            shifts_by_dentist[shift.dentist_id].append(shift)
+
+        all_slots: list[TimeSlot] = []
+        for did, _dentist_shifts in shifts_by_dentist.items():
+            dentist = await get_staff_by_id(engine._session, did)
+            dentist_name = dentist.full_name if dentist else "Unknown"
+
+            # Create a temporary engine call for this dentist
+            slots_utc = await engine.get_available_slots(
+                dentist_id=did,
+                service_id=service_id,
+                target_date=target_date,
+            )
+
+            time_slots = [
+                TimeSlot(
+                    startTime=start,
+                    endTime=end,
+                    dentistId=did,
+                    dentistName=dentist_name,
+                )
+                for start, end in slots_utc
+            ]
+            all_slots.extend(time_slots)
+
+        # Sort slots by start time
+        all_slots.sort(key=lambda s: s.start_time)
+        time_slots = all_slots
+
+    return AvailabilityResponse(
+        date=target_date,
+        serviceId=service_id,
+        durationMinutes=duration_minutes,
+        slots=time_slots,
+    )

@@ -329,3 +329,40 @@ class TimeOffBlockRead(BaseModel):
     end_time: datetime = Field(alias="endTime")
     reason: str | None
     created_at: datetime = Field(alias="createdAt")
+
+
+# ---------------------------------------------------------------------------
+# Availability schemas (Spec 04 §2 — Layer 1)
+# ---------------------------------------------------------------------------
+
+
+class AvailabilityQuery(BaseModel):
+    """Query parameters for slot search — Spec 04 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    dentist_id: UUID | None = Field(default=None, alias="dentistId")
+    service_id: UUID = Field(alias="serviceId")
+    date: date
+
+
+class TimeSlot(BaseModel):
+    """Single open bookable window — Spec 04 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    start_time: datetime = Field(alias="startTime")
+    end_time: datetime = Field(alias="endTime")
+    dentist_id: UUID = Field(alias="dentistId")
+    dentist_name: str = Field(alias="dentistName")
+
+
+class AvailabilityResponse(BaseModel):
+    """Collection of available slots — Spec 04 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    date: date
+    service_id: UUID = Field(alias="serviceId")
+    duration_minutes: int = Field(alias="durationMinutes")
+    slots: list[TimeSlot]
