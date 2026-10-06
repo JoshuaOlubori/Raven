@@ -69,3 +69,42 @@ class PatientNotFoundError(DomainError):
     error_code = "PATIENT_NOT_FOUND"
     message = "Patient not found"
     status_code = 404
+
+
+# ---------------------------------------------------------------------------
+# Schedule exceptions (Spec 04 §7)
+# ---------------------------------------------------------------------------
+
+
+class ShiftOverlapError(DomainError):
+    """Raised when a new recurring shift overlaps an existing shift
+    for that dentist on the same day.
+    """
+
+    error_code = "SHIFT_OVERLAP"
+    message = "Shift overlaps with an existing shift"
+    status_code = 409
+
+
+class InvalidTimeRangeError(DomainError):
+    """Raised when start_time >= end_time."""
+
+    error_code = "INVALID_TIME_RANGE"
+    message = "Start time must be before end time"
+    status_code = 400
+
+
+class UnauthorizedScheduleModificationError(DomainError):
+    """Raised when a dentist attempts to modify another dentist's schedule."""
+
+    error_code = "SCHEDULE_FORBIDDEN"
+    message = "Not authorized to modify this schedule"
+    status_code = 403
+
+
+class DentistNotAvailableError(DomainError):
+    """Raised when a dentist has no shifts on the requested date."""
+
+    error_code = "DENTIST_NOT_AVAILABLE"
+    message = "Dentist has no shifts on the requested date"
+    status_code = 200  # Returns empty slots per spec

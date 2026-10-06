@@ -2,17 +2,25 @@
 
 Verifies that ``ServiceDuration`` rejects invalid values per Spec 03 §2, and
 that ``PatientCreate`` rejects future dates of birth per Spec 02 §2.
+Verifies that ``WorkingShiftCreate`` and ``TimeOffBlockCreate`` reject
+invalid time ranges per Spec 04 §2.
 Expected values come from the spec, never from the implementation under test.
 """
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
+from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from app.schemas import PatientCreate, ServiceCreate
+from app.schemas import (
+    PatientCreate,
+    ServiceCreate,
+    TimeOffBlockCreate,
+    WorkingShiftCreate,
+)
 
 
 def test_invalid_duration_rejected_422() -> None:
@@ -44,3 +52,75 @@ def test_future_dob_rejected_422() -> None:
             date_of_birth=future_dob,
             phone="555-123-4567",
         )
+
+
+# ---------------------------------------------------------------------------
+# Schedule schema tests (Spec 04 §2 — Layer 1)
+# ---------------------------------------------------------------------------
+
+
+def test_shift_start_after_end_rejected() -> None:
+    """Spec 04 §2: WorkingShiftCreate rejects
+    start_time >= end_time with ValidationError.
+    """
+    dentist_id = uuid4()
+
+    # start_time == end_time should be rejected
+    with pytest.raises(ValidationError):
+        WorkingShiftCreate(
+            dentist_id=dentist_id,
+            day_of_week=0,
+            start_time=time(9, 0),
+            end_time=time(9, 0),
+        )
+
+    # start_time > end_time should be rejected
+    with pytest.raises(ValidationError):
+        WorkingShiftCreate(
+            dentist_id=dentist_id,
+            day_of_week=0,
+            start_time=time(17, 0),
+            end_time=time(9, 0),
+        )
+
+    # Valid time range should pass
+    WorkingShiftCreate(
+        dentist_id=dentist_id,
+        day_of_week=0,
+        start_time=time(9, 0),
+        end_time=time(17, 0),
+    )
+
+
+def test_time_off_block_start_after_end_rejected() -> None:
+    """Spec 04 §2: TimeOffBlockCreate rejects
+    start_time >= end_time with ValidationError.
+    """
+    dentist_id = uuid4()
+    base_time = datetime(2026, 1, 15, 9, 0, 0)
+
+    # start_time == end_time should be rejected
+    with pytest.raises(ValidationError):
+        TimeOffBlockCreate(
+            dentist_id=dentist_id,
+            start_time=base_time,
+            end_time=base_time,
+            reason="Vacation",
+        )
+
+    # start_time > end_time should be rejected
+    with pytest.raises(ValidationError):
+        TimeOffBlockCreate(
+            dentist_id=dentist_id,
+            start_time=base_time + timedelta(hours=8),
+            end_time=base_time,
+            reason="Vacation",
+        )
+
+    # Valid time range should pass
+    TimeOffBlockCreate(
+        dentist_id=dentist_id,
+        start_time=base_time,
+        end_time=base_time + timedelta(hours=1),
+        reason="Lunch",
+    )

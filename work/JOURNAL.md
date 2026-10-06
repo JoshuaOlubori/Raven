@@ -53,4 +53,11 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-05 20:41 | - | T-005 | review round 1: changes-requested, 1B/4M/0m/1n |
 | 2026-10-05 20:42 | - | T-005 | status -> changes-requested |
 | 2026-10-05 21:50 | - | T-005 | status -> in-review |
-| 2026-10-05 22:05 | - | T-005 | Addressed T-005-review-1 findings: added 7 tests (404 failure paths for GET/PATCH/DELETE non-existent patient, DENTIST 403 on write endpoints, GET/PATCH 200 happy paths, PATCH 422 future DOB) and documented get_current_user guard pattern in Spec 02 §4. All quality gates green (ruff, format, mypy, 47 tests). |
+| 2026-10-05 22:05 | - | T-005 | Addressed T-005-review-1 findings: added 7 tests (404 failure paths for GET/PATCH/DELETE non-existent patient, DENTIST 403 on write endpoints, GET/PATCH 200 happy paths, PATCH 422 future DOB) and documented get_current_user guard pattern in Spec 02 ï¿½4. All quality gates green (ruff, format, mypy, 47 tests). |
+| 2026-10-06 10:40 | - | T-005 | status -> done |
+| 2026-10-06 10:40 | - | T-005 | review round 2: approve, 0B/0M/0m/0n |
+| 2026-10-06 10:49 | - | T-004 | status -> done |
+| 2026-10-06 10:49 | - | T-004 | review round 2: approve, 0B/0M/0m/1n (previously approved, backfilling tracker) |
+| 2026-10-06 12:38 | - | T-006 | status -> in-progress |
+| 2026-10-06 12:55 | build | T-006 | T-006 built: WorkingShift/TimeOffBlock models, schedule service (overlap validation, ABAC), 6 endpoints, 14 tests (12 API + 2 schema). All 4 quality gates green (61 tests). -> in-review |
+| 2026-10-06 12:55 | - | T-006 | status -> in-review |

@@ -7,7 +7,7 @@ defined in Spec 01 §2 (Layer 1 — Contracts).
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 from typing import Annotated, Literal, Self
 from uuid import UUID
 
@@ -258,3 +258,74 @@ class PatientPage(BaseModel):
     page: int
     size: int
     pages: int
+
+
+# ---------------------------------------------------------------------------
+# Schedule schemas (Spec 04 §2 — Layer 1)
+# ---------------------------------------------------------------------------
+
+
+DayOfWeek = Annotated[
+    int, Field(ge=0, le=6, description="0=Monday, 1=Tuesday, ..., 6=Sunday")
+]
+
+
+class WorkingShiftCreate(BaseModel):
+    """Register weekly recurring shift — Spec 04 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    dentist_id: UUID = Field(alias="dentistId")
+    day_of_week: DayOfWeek = Field(alias="dayOfWeek")
+    start_time: time = Field(alias="startTime")
+    end_time: time = Field(alias="endTime")
+
+    @model_validator(mode="after")
+    def _validate_time_range(self) -> Self:
+        """Enforce start_time < end_time (Spec 04 §2, §7)."""
+        if self.start_time >= self.end_time:
+            raise ValueError("start_time must be before end_time")
+        return self
+
+
+class WorkingShiftRead(BaseModel):
+    """Public shift view with camelCase aliases — Spec 04 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: UUID
+    dentist_id: UUID = Field(alias="dentistId")
+    day_of_week: int = Field(alias="dayOfWeek")
+    start_time: time = Field(alias="startTime")
+    end_time: time = Field(alias="endTime")
+
+
+class TimeOffBlockCreate(BaseModel):
+    """Ad-hoc blocked period input — Spec 04 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    dentist_id: UUID = Field(alias="dentistId")
+    start_time: datetime = Field(alias="startTime")
+    end_time: datetime = Field(alias="endTime")
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_time_range(self) -> Self:
+        """Enforce start_time < end_time (Spec 04 §2, §7)."""
+        if self.start_time >= self.end_time:
+            raise ValueError("start_time must be before end_time")
+        return self
+
+
+class TimeOffBlockRead(BaseModel):
+    """Public time-off view with camelCase aliases — Spec 04 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: UUID
+    dentist_id: UUID = Field(alias="dentistId")
+    start_time: datetime = Field(alias="startTime")
+    end_time: datetime = Field(alias="endTime")
+    reason: str | None
+    created_at: datetime = Field(alias="createdAt")

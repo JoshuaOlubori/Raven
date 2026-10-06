@@ -260,3 +260,23 @@ async def dentist_staff(
         await session.commit()
         await session.refresh(staff)
         return staff
+
+
+@pytest.fixture
+async def dentist_staff_2(
+    test_session_local: async_sessionmaker,
+    override_dbsession: None,
+) -> Staff:
+    """Persist a second active DENTIST staff member (for peer authorization tests)."""
+    async with test_session_local() as session:
+        staff = Staff(
+            email=f"dentist2-{uuid.uuid4().hex[:8]}@clinic.com",
+            hashed_password="irrelevant",
+            full_name="Dentist User Two",
+            role="DENTIST",
+            is_active=True,
+        )
+        session.add(staff)
+        await session.commit()
+        await session.refresh(staff)
+        return staff

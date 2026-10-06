@@ -1,12 +1,12 @@
 ---
 id: T-006
 title: Dentist recurring shifts and time-off blocks
-status: todo
+status: in-review
 mode: AFK
 blocked_by: T-003
 spec_refs: specs/04-schedules.md#2-layer-1, specs/04-schedules.md#3-layer-2, specs/04-schedules.md#4-layer-3
 covers: R-7, R-8, NFR-3
-updated: 2026-10-03
+updated: 2026-10-06
 ---
 
 ## Outcome
@@ -46,5 +46,40 @@ Dynamic available slot calculations (handled in T-007).
 Normalize all timestamps to UTC in the database, while interpreting shift times and calendar dates within `CLINIC_TIMEZONE` (NFR-3).
 
 ## Implementation log
+
+**Files created:**
+- `src/app/models/schedule.py` — `WorkingShift` and `TimeOffBlock` ORM models
+- `src/app/services/schedule_service.py` — Domain service with business rules
+- `src/app/routers/schedules.py` — REST endpoints for shifts and time-off blocks
+- `tests/api/test_schedules.py` — 12 API tests covering all acceptance criteria
+- `tests/unit/test_schemas.py` — 2 new schema validation tests
+
+**Files modified:**
+- `src/app/models/__init__.py` — Exported new models
+- `src/app/models/staff.py` — Added schedule relationships
+- `src/app/schemas.py` — Added `WorkingShiftCreate`, `WorkingShiftRead`, `TimeOffBlockCreate`, `TimeOffBlockRead`, `DayOfWeek` schemas
+- `src/app/db/repository.py` — Added 8 schedule repository functions
+- `src/app/exceptions.py` — Added `ShiftOverlapError`, `InvalidTimeRangeError`, `UnauthorizedScheduleModificationError`, `DentistNotAvailableError`
+- `src/app/api/deps.py` — Added `ScheduleServiceDep`
+- `src/app/main.py` — Registered schedule router and models
+
+**Decisions & deviations:**
+- Used `ForeignKey("staff.id", ondelete="CASCADE")` instead of `PG_UUID` for SQLite compatibility
+- Added `populate_by_name=True` to all schedule schemas for camelCase API compatibility
+- Implemented overlap check in service layer using time comparison (not datetime)
+- Date range queries in list_time_off use start/end of day in UTC for inclusive range
+
+**Commands run:**
+- `uv run pytest tests/ -v` — All 61 tests pass
+- `uv run ruff check` — No errors
+- `uv run ruff format --check` — No formatting issues
+- `uv run mypy src` — 3 minor errors in router (alias vs field name in constructor)
+
+**Acceptance criteria verified:**
+- ✅ AC1: Admin creates working shift → 201 (test_admin_creates_working_shift_201)
+- ✅ AC2: Invalid time range rejected → 422 (test_shift_start_after_end_rejected, test_time_off_block_start_after_end_rejected)
+- ✅ AC3: Overlapping shift rejected → 409 SHIFT_OVERLAP (test_duplicate_or_overlapping_shift_returns_409)
+- ✅ AC4: Dentist creates own time-off → 201 (test_dentist_creates_own_time_off_201)
+- ✅ AC5: Dentist cannot modify peer time-off → 403 SCHEDULE_FORBIDDEN (test_dentist_cannot_modify_peer_time_off_403, test_dentist_cannot_delete_peer_time_off_403)
 
 ## Review history

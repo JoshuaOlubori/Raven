@@ -18,6 +18,7 @@ from app.config import Settings, get_settings
 from app.db.session import SessionLocal
 from app.services.auth_service import AuthService
 from app.services.patient_service import PatientService
+from app.services.schedule_service import ScheduleService
 from app.services.service_catalog import ServiceCatalog
 
 # ---------------------------------------------------------------------------
@@ -87,3 +88,16 @@ def get_patient_service(session: DbSessionDep) -> PatientService:
 
 
 PatientServiceDep = Annotated[PatientService, Depends(get_patient_service)]
+
+
+# ---------------------------------------------------------------------------
+# Schedule service dependency (Spec 04 §4 — Layer 3)
+# ---------------------------------------------------------------------------
+
+
+def get_schedule_service(session: DbSessionDep) -> ScheduleService:
+    """Construct a ``ScheduleService`` with the request-scoped session."""
+    return ScheduleService(session)
+
+
+ScheduleServiceDep = Annotated[ScheduleService, Depends(get_schedule_service)]

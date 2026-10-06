@@ -6,13 +6,14 @@ objects.  No business logic lives here — queries only.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, time
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.patient import Patient
+from app.models.schedule import TimeOffBlock, WorkingShift
 from app.models.service import DentalService
 from app.models.staff import Staff
 
@@ -239,3 +240,108 @@ async def soft_delete_patient(session: AsyncSession, patient: Patient) -> Patien
     await session.flush()
     await session.refresh(patient)
     return patient
+
+
+# ---------------------------------------------------------------------------
+# Schedule repository functions (Spec 04 §3 — Layer 2)
+# ---------------------------------------------------------------------------
+
+
+async def list_shifts_for_dentist(
+    session: AsyncSession, dentist_id: UUID | None = None
+) -> list[WorkingShift]:
+    """Return all working shifts, optionally filtered by dentist."""
+    stmt = select(WorkingShift)
+    if dentist_id is not None:
+        stmt = stmt.where(WorkingShift.dentist_id == dentist_id)
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def list_shifts_by_day(
+    session: AsyncSession, day_of_week: int, dentist_id: UUID | None = None
+) -> list[WorkingShift]:
+    """Return all working shifts for a specific day, optionally filtered by dentist."""
+    stmt = select(WorkingShift).where(WorkingShift.day_of_week == day_of_week)
+    if dentist_id is not None:
+        stmt = stmt.where(WorkingShift.dentist_id == dentist_id)
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def create_working_shift(
+    session: AsyncSession,
+    *,
+    dentist_id: UUID,
+    day_of_week: int,
+    start_time: time,
+    end_time: time,
+) -> WorkingShift:
+    """Insert a new working shift and return the persisted object."""
+    shift = WorkingShift(
+        dentist_id=dentist_id,
+        day_of_week=day_of_week,
+        start_time=start_time,
+        end_time=end_time,
+    )
+    session.add(shift)
+    await session.flush()
+    await session.refresh(shift)
+    return shift
+
+
+async def delete_working_shift(session: AsyncSession, shift_id: UUID) -> bool:
+    """Delete a working shift by ID. Returns True if deleted, False if not found."""
+    shift = await session.get(WorkingShift, shift_id)
+    if shift is None:
+        return False
+    await session.delete(shift)
+    await session.flush()
+    return True
+
+
+async def list_time_off_blocks(
+    session: AsyncSession,
+    dentist_id: UUID,
+    start_range: datetime,
+    end_range: datetime,
+) -> list[TimeOffBlock]:
+    """Return time-off blocks for a dentist within a date range."""
+    result = await session.execute(
+        select(TimeOffBlock)
+        .where(TimeOffBlock.dentist_id == dentist_id)
+        .where(TimeOffBlock.start_time < end_range)
+        .where(TimeOffBlock.end_time > start_range)
+    )
+    return list(result.scalars().all())
+
+
+async def create_time_off_block(
+    session: AsyncSession,
+    *,
+    dentist_id: UUID,
+    start_time: datetime,
+    end_time: datetime,
+    reason: str | None,
+) -> TimeOffBlock:
+    """Insert a new time-off block and return the persisted object."""
+    block = TimeOffBlock(
+        dentist_id=dentist_id,
+        start_time=start_time,
+        end_time=end_time,
+        reason=reason,
+    )
+    session.add(block)
+    await session.flush()
+    await session.refresh(block)
+    return block
+
+
+async def delete_time_off_block(session: AsyncSession, block_id: UUID) -> bool:
+    """Delete a time-off block by ID. Returns True if deleted, False if not found."""
+    block = await session.get(TimeOffBlock, block_id)
+    if block is None:
+        return False
+    await session.delete(block)
+    await session.flush()
+    return True

@@ -21,12 +21,17 @@ from app.exceptions import DomainError
 from app.models.patient import (  # noqa: F401 — register table on Base.metadata
     Patient,
 )
+from app.models.schedule import (  # noqa: F401 — register table on Base.metadata
+    TimeOffBlock,
+    WorkingShift,
+)
 from app.models.service import (
     DentalService,  # noqa: F401 — register table on Base.metadata
 )
 from app.models.staff import Staff  # noqa: F401 — register table on Base.metadata
 from app.routers.auth import router as auth_router
 from app.routers.patients import router as patients_router
+from app.routers.schedules import router as schedules_router
 from app.routers.services import router as services_router
 from app.routers.staff import router as staff_router
 
@@ -47,6 +52,7 @@ app.include_router(auth_router)
 app.include_router(services_router)
 app.include_router(staff_router)
 app.include_router(patients_router)
+app.include_router(schedules_router)
 
 
 @app.middleware("http")
