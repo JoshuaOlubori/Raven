@@ -434,18 +434,24 @@ async def check_appointment_overlap(
 
     Two intervals [a, b) and [c, d) overlap iff max(a, c) < min(b, d).
     Equivalent to: start_time < existing.end_time AND end_time > existing.start_time
-    """
-    from sqlalchemy import select
 
-    stmt = select(Appointment.id).where(
-        Appointment.dentist_id == dentist_id,
-        Appointment.status != "CANCELLED",
-        Appointment.start_time < end_time,
-        Appointment.end_time > start_time,
+    Uses SELECT ... FOR UPDATE NOWAIT so that under PostgreSQL two concurrent
+    transactions cannot both read zero overlapping rows and both insert
+    (ADR 0001, Spec 05 §5, NFR-1).  The lock is a no-op under SQLite (test DB)
+    but harmless — SQLite serialises writes at the file level already.
+    """
+    stmt = (
+        select(Appointment.id)
+        .where(
+            Appointment.dentist_id == dentist_id,
+            Appointment.status != "CANCELLED",
+            Appointment.start_time < end_time,
+            Appointment.end_time > start_time,
+        )
+        .with_for_update(nowait=True)
     )
     if exclude_id is not None:
         stmt = stmt.where(Appointment.id != exclude_id)
-    # Under PostgreSQL: .with_for_update() ensures serializable conflict rejection
     existing = await session.scalar(stmt)
     return existing is not None
 

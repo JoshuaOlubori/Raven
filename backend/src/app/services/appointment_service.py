@@ -13,7 +13,7 @@ The service is stateless: it holds only a reference to the request-scoped
 
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -99,7 +99,7 @@ class AppointmentService:
             start_time = start_time.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
 
         duration = service.duration_minutes
-        end_time = start_time + __import__("datetime").timedelta(minutes=duration)
+        end_time = start_time + timedelta(minutes=duration)
 
         # 2. Check shift coverage
         await self._validate_shift_coverage(dentist_id, start_time, end_time)
@@ -166,16 +166,17 @@ class AppointmentService:
 
         Converts start/end to clinic timezone to find the weekday and
         checks against recurring weekly shifts.
+
+        Precondition: start_time and end_time are naive UTC datetimes
+        (normalised by book_appointment before this helper is called).
         """
-        # Ensure UTC timezone for conversion (naive datetimes are treated as UTC)
-        if start_time.tzinfo is None:
-            start_time = start_time.replace(tzinfo=ZoneInfo("UTC"))
-        if end_time.tzinfo is None:
-            end_time = end_time.replace(tzinfo=ZoneInfo("UTC"))
+        # Attach UTC info for astimezone() conversion to clinic timezone
+        start_utc = start_time.replace(tzinfo=ZoneInfo("UTC"))
+        end_utc = end_time.replace(tzinfo=ZoneInfo("UTC"))
 
         # Convert to clinic timezone to find weekday
-        start_local = start_time.astimezone(self._clinic_tz)
-        end_local = end_time.astimezone(self._clinic_tz)
+        start_local = start_utc.astimezone(self._clinic_tz)
+        end_local = end_utc.astimezone(self._clinic_tz)
 
         # Must be same day in clinic timezone
         if start_local.date() != end_local.date():
@@ -205,13 +206,12 @@ class AppointmentService:
     async def _validate_time_off_conflict(
         self, dentist_id: UUID, start_time: datetime, end_time: datetime
     ) -> None:
-        """Validate no time-off block overlaps the requested window."""
-        # Time-off blocks are stored in UTC, query with the UTC window
-        # Ensure UTC timezone
-        if start_time.tzinfo is None:
-            start_time = start_time.replace(tzinfo=ZoneInfo("UTC"))
-        if end_time.tzinfo is None:
-            end_time = end_time.replace(tzinfo=ZoneInfo("UTC"))
+        """Validate no time-off block overlaps the requested window.
+
+        Precondition: start_time and end_time are naive UTC datetimes
+        (normalised by book_appointment before this helper is called).
+        Time-off blocks are stored in naive UTC, so the comparison is direct.
+        """
         blocks = await list_time_off_blocks(
             self._session, dentist_id, start_time, end_time
         )
