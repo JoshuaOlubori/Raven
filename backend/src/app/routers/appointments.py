@@ -16,7 +16,12 @@ from fastapi import APIRouter, Depends, Query, status
 from app.api.auth import CurrentUserDep, get_current_user, require_roles
 from app.api.deps import AppointmentServiceDep
 from app.models.appointment import Appointment
-from app.schemas import AppointmentCreate, AppointmentDetailRead
+from app.schemas import (
+    AppointmentCancel,
+    AppointmentCreate,
+    AppointmentDetailRead,
+    AppointmentReschedule,
+)
 
 router = APIRouter(prefix="/api/v1/appointments", tags=["appointments"])
 
@@ -124,3 +129,80 @@ async def get_appointment_endpoint(
     """
     appointment = await service.get_appointment_detail(appointment_id)
     return _appointment_detail_read(appointment)
+
+
+# ---------------------------------------------------------------------------
+# Reschedule (Admin, Receptionist)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{appointment_id}/reschedule",
+    response_model=AppointmentDetailRead,
+    dependencies=[Depends(require_roles("ADMIN", "RECEPTIONIST"))],
+)
+async def reschedule_appointment_endpoint(
+    appointment_id: UUID,
+    request: AppointmentReschedule,
+    service: AppointmentServiceDep,
+    current_user: CurrentUserDep,
+) -> AppointmentDetailRead:
+    """Reschedule an appointment to a new slot (Admin, Receptionist) (R-11, Spec 05 §4).
+
+    Path parameters:
+    - appointment_id: UUID of the appointment to reschedule
+
+    Request body:
+    - startTime: New appointment start time in UTC (ISO 8601)
+    - dentistId: Optional new dentist UUID
+
+    Returns 200 with the updated appointment including
+    patient, dentist, and service details.
+    """
+    appointment = await service.reschedule_appointment(
+        appointment_id=appointment_id,
+        new_start_time=request.start_time,
+        new_dentist_id=request.dentist_id,
+        current_user_role=current_user.role,
+    )
+    # Fetch full detail with eager-loaded relations
+    detail = await service.get_appointment_detail(appointment.id)
+    return _appointment_detail_read(detail)
+
+
+# ---------------------------------------------------------------------------
+# Cancel (Admin, Receptionist)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{appointment_id}/cancel",
+    response_model=AppointmentDetailRead,
+    dependencies=[Depends(require_roles("ADMIN", "RECEPTIONIST"))],
+)
+async def cancel_appointment_endpoint(
+    appointment_id: UUID,
+    request: AppointmentCancel,
+    service: AppointmentServiceDep,
+    current_user: CurrentUserDep,
+) -> AppointmentDetailRead:
+    """Cancel an appointment with a mandatory reason (Admin, Receptionist)
+    (R-13, Spec 05 §4).
+
+    Path parameters:
+    - appointment_id: UUID of the appointment to cancel
+
+    Request body:
+    - cancellationReason: Mandatory non-empty reason for cancellation
+
+    Returns 200 with the updated appointment including
+    patient, dentist, and service details.
+    """
+    appointment = await service.cancel_appointment(
+        appointment_id=appointment_id,
+        cancellation_reason=request.cancellation_reason,
+        current_user_role=current_user.role,
+    )
+    # Fetch full detail with eager-loaded relations
+    detail = await service.get_appointment_detail(appointment.id)
+    return _appointment_detail_read(detail)

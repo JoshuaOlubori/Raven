@@ -22,6 +22,11 @@ class DomainError(Exception):
     message: str = "Domain error"
     status_code: int = 400
 
+    def __init__(self, message: str | None = None) -> None:
+        if message is not None:
+            self.message = message
+        super().__init__(self.message)
+
 
 class EmailAlreadyExistsError(DomainError):
     """Raised when a staff member is created with an email already in use."""

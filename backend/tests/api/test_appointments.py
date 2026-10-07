@@ -6,8 +6,8 @@ drawn from the PRD and spec, never from the implementation under test.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from uuid import uuid4
+from datetime import date, datetime, timedelta
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -507,3 +507,288 @@ async def test_get_appointment_unauthenticated_401(client: AsyncClient) -> None:
     """Unauthenticated get detail → 401."""
     response = await client.get(f"/api/v1/appointments/{uuid4()}")
     assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# T-009: Reschedule and Cancel tests
+# ---------------------------------------------------------------------------
+
+
+async def test_reschedule_appointment_success_200(
+    receptionist_staff: Staff,
+    test_dentist: Staff,
+    test_patient: Staff,
+    test_service: Staff,
+    auth_headers: callable,
+    client: AsyncClient,
+) -> None:
+    """R-11: Receptionist reschedules appointment → 200, start_time updated,
+    status reset to SCHEDULED.
+    """
+    headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+    clinic_tz = ZoneInfo("America/New_York")
+    # Monday Jan 5, 2026 at 09:00 EST = 14:00 UTC
+    start_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
+
+    # First, create an appointment
+    create_resp = await client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patientId": str(test_patient.id),
+            "dentistId": str(test_dentist.id),
+            "serviceId": str(test_service.id),
+            "startTime": start_time,
+        },
+    )
+    assert create_resp.status_code == 201
+    created = create_resp.json()
+    appointment_id = UUID(created["id"])
+
+    # Now reschedule to 10:00 EST = 15:00 UTC
+    new_start_time = datetime(2026, 1, 5, 10, 0, 0, tzinfo=clinic_tz).isoformat()
+
+    reschedule_resp = await client.post(
+        f"/api/v1/appointments/{appointment_id}/reschedule",
+        headers=headers,
+        json={"startTime": new_start_time},
+    )
+
+    assert reschedule_resp.status_code == 200
+    body = reschedule_resp.json()
+    assert body["status"] == "SCHEDULED"
+    assert body["id"] == str(appointment_id)
+    # API returns naive UTC datetimes; compare as UTC
+    from datetime import datetime as dt
+
+    expected_start_utc = dt.fromisoformat(new_start_time).astimezone(ZoneInfo("UTC"))
+    actual_start_utc = dt.fromisoformat(body["startTime"]).replace(
+        tzinfo=ZoneInfo("UTC")
+    )
+    assert actual_start_utc == expected_start_utc
+    # end_time should be start_time + 45 minutes
+    expected_end_utc = expected_start_utc + timedelta(minutes=45)
+    actual_end_utc = dt.fromisoformat(body["endTime"]).replace(tzinfo=ZoneInfo("UTC"))
+    assert actual_end_utc == expected_end_utc
+    assert "patient" in body
+    assert "dentist" in body
+    assert "service" in body
+
+
+async def test_reschedule_completed_appointment_rejected_400(
+    receptionist_staff: Staff,
+    test_dentist: Staff,
+    test_patient: Staff,
+    test_service: Staff,
+    auth_headers: callable,
+    client: AsyncClient,
+    test_session_local,
+) -> None:
+    """Given an appointment in COMPLETED status, reschedule → 400."""
+    headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+    clinic_tz = ZoneInfo("America/New_York")
+    start_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
+
+    # Create appointment
+    create_resp = await client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patientId": str(test_patient.id),
+            "dentistId": str(test_dentist.id),
+            "serviceId": str(test_service.id),
+            "startTime": start_time,
+        },
+    )
+    assert create_resp.status_code == 201
+    created = create_resp.json()
+    appointment_id = UUID(created["id"])
+
+    # Manually set status to COMPLETED via direct DB update (simulating completed appt)
+    from sqlalchemy import select
+
+    from app.models.appointment import Appointment
+
+    async with test_session_local() as session:
+        stmt = select(Appointment).where(Appointment.id == appointment_id)
+        result = await session.execute(stmt)
+        appt = result.scalar_one()
+        appt.status = "COMPLETED"
+        await session.commit()
+
+    # Try to reschedule
+    new_start_time = datetime(2026, 1, 5, 10, 0, 0, tzinfo=clinic_tz).isoformat()
+    reschedule_resp = await client.post(
+        f"/api/v1/appointments/{appointment_id}/reschedule",
+        headers=headers,
+        json={"startTime": new_start_time},
+    )
+
+    assert reschedule_resp.status_code == 400
+    body = reschedule_resp.json()
+    assert body["error"] == "INVALID_STATUS_TRANSITION"
+    assert "Cannot reschedule" in body["message"]
+
+
+async def test_reschedule_to_conflicting_slot_returns_409(
+    receptionist_staff: Staff,
+    test_dentist: Staff,
+    test_patient: Staff,
+    test_service: Staff,
+    auth_headers: callable,
+    client: AsyncClient,
+    test_session_local,
+) -> None:
+    """Reschedule to a slot overlapping another appointment → 409."""
+    headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+    clinic_tz = ZoneInfo("America/New_York")
+
+    # Create first appointment at 09:00
+    start_time1 = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
+    create1 = await client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patientId": str(test_patient.id),
+            "dentistId": str(test_dentist.id),
+            "serviceId": str(test_service.id),
+            "startTime": start_time1,
+        },
+    )
+    assert create1.status_code == 201
+    appt1_id = UUID(create1.json()["id"])
+
+    # Create second patient via test session
+    from app.models.patient import Patient
+
+    async with test_session_local() as session:
+        patient2 = Patient(
+            first_name="John",
+            last_name="Smith",
+            date_of_birth=date(1985, 5, 15),
+            phone="+15559876543",
+            email="john.smith@example.com",
+            is_active=True,
+        )
+        session.add(patient2)
+        await session.commit()
+        await session.refresh(patient2)
+        patient2_id = patient2.id
+
+    # Create second appointment at 10:00
+    start_time2 = datetime(2026, 1, 5, 10, 0, 0, tzinfo=clinic_tz).isoformat()
+    create2 = await client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patientId": str(patient2_id),
+            "dentistId": str(test_dentist.id),
+            "serviceId": str(test_service.id),
+            "startTime": start_time2,
+        },
+    )
+    assert create2.status_code == 201
+    _ = UUID(create2.json()["id"])
+
+    # Try to reschedule first appointment to 10:00 (conflicts with second)
+    new_start_time = datetime(2026, 1, 5, 10, 0, 0, tzinfo=clinic_tz).isoformat()
+    reschedule_resp = await client.post(
+        f"/api/v1/appointments/{appt1_id}/reschedule",
+        headers=headers,
+        json={"startTime": new_start_time},
+    )
+
+    assert reschedule_resp.status_code == 409
+    body = reschedule_resp.json()
+    assert body["error"] == "APPOINTMENT_OVERLAP_CONFLICT"
+
+
+async def test_cancel_appointment_with_reason_success_200(
+    receptionist_staff: Staff,
+    test_dentist: Staff,
+    test_patient: Staff,
+    test_service: Staff,
+    auth_headers: callable,
+    client: AsyncClient,
+) -> None:
+    """R-13: Receptionist cancels appointment with reason → 200, status CANCELLED,
+    cancellationReason saved.
+    """
+    headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+    clinic_tz = ZoneInfo("America/New_York")
+    start_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
+
+    # Create appointment
+    create_resp = await client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patientId": str(test_patient.id),
+            "dentistId": str(test_dentist.id),
+            "serviceId": str(test_service.id),
+            "startTime": start_time,
+        },
+    )
+    assert create_resp.status_code == 201
+    created = create_resp.json()
+    appointment_id = UUID(created["id"])
+
+    # Cancel with reason
+    cancel_resp = await client.post(
+        f"/api/v1/appointments/{appointment_id}/cancel",
+        headers=headers,
+        json={"cancellationReason": "Patient has flu"},
+    )
+
+    assert cancel_resp.status_code == 200
+    body = cancel_resp.json()
+    assert body["status"] == "CANCELLED"
+    assert body["id"] == str(appointment_id)
+    assert body["cancellationReason"] == "Patient has flu"
+    assert "patient" in body
+    assert "dentist" in body
+    assert "service" in body
+
+
+async def test_cancel_appointment_without_reason_rejected_422(
+    receptionist_staff: Staff,
+    test_dentist: Staff,
+    test_patient: Staff,
+    test_service: Staff,
+    auth_headers: callable,
+    client: AsyncClient,
+) -> None:
+    """Cancellation with empty reason → 422 ValidationError."""
+    headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+    clinic_tz = ZoneInfo("America/New_York")
+    start_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
+
+    # Create appointment
+    create_resp = await client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patientId": str(test_patient.id),
+            "dentistId": str(test_dentist.id),
+            "serviceId": str(test_service.id),
+            "startTime": start_time,
+        },
+    )
+    assert create_resp.status_code == 201
+    created = create_resp.json()
+    appointment_id = UUID(created["id"])
+
+    # Cancel with empty reason
+    cancel_resp = await client.post(
+        f"/api/v1/appointments/{appointment_id}/cancel",
+        headers=headers,
+        json={"cancellationReason": ""},
+    )
+
+    assert cancel_resp.status_code == 422
+    body = cancel_resp.json()
+    # Pydantic validation error format for min_length=1 on NonEmptyStr
+    assert "detail" in body
+    assert len(body["detail"]) == 1
+    assert body["detail"][0]["loc"] == ["body", "cancellationReason"]
+    assert "at least 1" in body["detail"][0]["msg"]

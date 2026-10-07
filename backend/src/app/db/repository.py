@@ -479,3 +479,17 @@ async def create_appointment(
     await session.flush()
     await session.refresh(appointment)
     return appointment
+
+
+async def update_appointment(
+    session: AsyncSession,
+    appointment: Appointment,
+    **kwargs: object,
+) -> Appointment:
+    """Apply keyword field updates to an appointment and return the refreshed object."""
+    for key, value in kwargs.items():
+        setattr(appointment, key, value)
+    session.add(appointment)
+    await session.flush()
+    await session.refresh(appointment)
+    return appointment

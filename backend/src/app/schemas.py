@@ -395,6 +395,23 @@ class AppointmentCreate(BaseModel):
     start_time: datetime = Field(alias="startTime")
 
 
+class AppointmentReschedule(BaseModel):
+    """Appointment reschedule input — Spec 05 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    start_time: datetime = Field(alias="startTime")
+    dentist_id: UUID | None = Field(default=None, alias="dentistId")
+
+
+class AppointmentCancel(BaseModel):
+    """Appointment cancellation input — Spec 05 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    cancellation_reason: NonEmptyStr = Field(alias="cancellationReason")
+
+
 class AppointmentRead(BaseModel):
     """Public appointment view with camelCase aliases — Spec 05 §2, Layer 1."""
 

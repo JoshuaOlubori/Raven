@@ -85,3 +85,4 @@ Append-only history. Newest entries at the bottom.
 
 ## 2026-10-07 11:21 — T-008 review round 2: changes-requested (1B/2M/2m)
 No fix commit found between round 1 and round 2. All round-1 findings remain unaddressed. Blocker: missing with_for_update() in check_appointment_overlap (repository.py:868). This is the second consecutive changes-requested verdict. Implementer must address before next review.
+| 2026-10-07 12:14 | - | T-009 | status -> in-progress |
