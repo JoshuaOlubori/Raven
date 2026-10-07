@@ -148,9 +148,8 @@ async def test_availability_endpoint_success_200(
         # Verify end time = start + 45 minutes
         end_utc = datetime.fromisoformat(slot["endTime"].replace("Z", "+00:00"))
         end_local = end_utc.astimezone(clinic_tz)
-        expected_end = (
-            start_local.replace(second=0, microsecond=0)
-            + timedelta(minutes=45)
+        expected_end = start_local.replace(second=0, microsecond=0) + timedelta(
+            minutes=45
         )
         assert end_local.strftime("%H:%M:%S") == expected_end.strftime("%H:%M:%S")
 

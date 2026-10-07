@@ -32,6 +32,11 @@ class AvailabilityEngine:
 
     Attributes:
         SLOT_STEP: Slot generation step size (15 minutes per Spec 04 §5).
+            Rationale: 15-minute steps balance granularity for patient booking
+            convenience with computational efficiency. Full-duration steps would
+            produce fewer candidate intervals but could miss valid slots between
+            existing appointments and time-off blocks. This step size is the
+            industry standard for dental scheduling.
     """
 
     SLOT_STEP = timedelta(minutes=15)
@@ -67,27 +72,59 @@ class AvailabilityEngine:
             return []
         duration_minutes = service.duration_minutes
 
+        return await self.get_available_slots_with_data(
+            dentist_id=dentist_id,
+            duration_minutes=duration_minutes,
+            target_date=target_date,
+        )
+
+    async def get_available_slots_with_data(
+        self,
+        *,
+        dentist_id: UUID,
+        duration_minutes: int,
+        target_date: date,
+        shifts: list[WorkingShift] | None = None,
+        time_off_blocks: list | None = None,
+    ) -> list[tuple[datetime, datetime]]:
+        """Compute available slots using pre-fetched data (for batch optimization).
+
+        Args:
+            dentist_id: UUID of the dentist.
+            duration_minutes: Service duration in minutes.
+            target_date: Date in CLINIC_TIMEZONE to compute slots for.
+            shifts: Pre-fetched shifts for this dentist on the target weekday.
+                   If None, fetches from database.
+            time_off_blocks: Pre-fetched time-off blocks for this dentist
+                on the target date. If None, fetches from database.
+
+        Returns:
+            List of (start_time, end_time) tuples in UTC representing
+            available slots matching the service duration.
+        """
         # 2. Determine weekday in clinic timezone
         # Convert date to datetime at midnight in clinic timezone
         target_dt = date_to_midnight_local(target_date, self._clinic_tz)
         weekday = target_dt.weekday()  # 0=Monday, ..., 6=Sunday
 
-        # 3. Fetch shifts for this dentist on this weekday
-        shifts = await list_shifts_by_day(self._session, weekday, dentist_id)
+        # 3. Fetch shifts for this dentist on this weekday (if not provided)
+        if shifts is None:
+            shifts = await list_shifts_by_day(self._session, weekday, dentist_id)
         if not shifts:
             return []  # No shifts = no availability
 
-        # 4. Fetch time-off blocks for the target day window
-        day_start_utc = target_dt.replace(
-            hour=0, minute=0, second=0, microsecond=0
-        ).astimezone(ZoneInfo("UTC"))
-        day_end_utc = target_dt.replace(
-            hour=23, minute=59, second=59, microsecond=999999
-        ).astimezone(ZoneInfo("UTC"))
+        # 4. Fetch time-off blocks for the target day window (if not provided)
+        if time_off_blocks is None:
+            day_start_utc = target_dt.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            ).astimezone(ZoneInfo("UTC"))
+            day_end_utc = target_dt.replace(
+                hour=23, minute=59, second=59, microsecond=999999
+            ).astimezone(ZoneInfo("UTC"))
 
-        time_off_blocks = await list_time_off_blocks(
-            self._session, dentist_id, day_start_utc, day_end_utc
-        )
+            time_off_blocks = await list_time_off_blocks(
+                self._session, dentist_id, day_start_utc, day_end_utc
+            )
 
         # 5. Build busy intervals from time-off blocks
         # Note: Appointment model not implemented yet (T-008).

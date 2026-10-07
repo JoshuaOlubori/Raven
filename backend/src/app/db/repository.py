@@ -23,6 +23,21 @@ async def get_staff_by_id(session: AsyncSession, staff_id: UUID) -> Staff | None
     return await session.get(Staff, staff_id)
 
 
+async def get_staff_by_ids(session: AsyncSession, staff_ids: list[UUID]) -> list[Staff]:
+    """Fetch multiple staff members by their IDs in a single query.
+
+    Returns a list of Staff objects in the same order as the input IDs.
+    Missing IDs are skipped (no error raised).
+    """
+    if not staff_ids:
+        return []
+    result = await session.execute(select(Staff).where(Staff.id.in_(staff_ids)))
+    staff_list = list(result.scalars().all())
+    # Preserve input order
+    staff_by_id = {s.id: s for s in staff_list}
+    return [staff_by_id[sid] for sid in staff_ids if sid in staff_by_id]
+
+
 async def get_staff_by_email(session: AsyncSession, email: str) -> Staff | None:
     """Fetch a single staff member by unique email address."""
     result = await session.scalars(select(Staff).where(Staff.email == email))

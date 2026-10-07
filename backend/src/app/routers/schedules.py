@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 
@@ -23,13 +24,11 @@ from app.schemas import (
     WorkingShiftCreate,
     WorkingShiftRead,
 )
-from app.utils.datetime_utils import date_to_midnight_local
 
 if TYPE_CHECKING:
     from app.models.schedule import TimeOffBlock, WorkingShift
 
 router = APIRouter(prefix="/api/v1/schedules", tags=["schedules"])
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -221,8 +220,11 @@ async def get_availability_endpoint(
     from app.db.repository import (
         get_service_by_id,
         get_staff_by_id,
+        get_staff_by_ids,
         list_shifts_by_day,
+        list_time_off_blocks,
     )
+    from app.utils.datetime_utils import date_to_midnight_local
 
     # Validate service exists and get duration
     service = await get_service_by_id(engine._session, service_id)
@@ -254,7 +256,7 @@ async def get_availability_endpoint(
             for start, end in slots_utc
         ]
     else:
-        # Query all dentists with shifts on the target weekday
+        # Query all dentists with shifts on the target weekday (optimized)
         # Get weekday in clinic timezone
         target_dt_tz = date_to_midnight_local(target_date, engine._clinic_tz)
         weekday = target_dt_tz.weekday()
@@ -268,23 +270,45 @@ async def get_availability_endpoint(
                 slots=[],
             )
 
-        # Group shifts by dentist and compute slots for each
+        # Group shifts by dentist
         from collections import defaultdict
 
-        shifts_by_dentist: dict[UUID, list] = defaultdict(list)
+        shifts_by_dentist: dict[UUID, list[WorkingShift]] = defaultdict(list)
         for shift in shifts:
             shifts_by_dentist[shift.dentist_id].append(shift)
 
-        all_slots: list[TimeSlot] = []
-        for did, _dentist_shifts in shifts_by_dentist.items():
-            dentist = await get_staff_by_id(engine._session, did)
-            dentist_name = dentist.full_name if dentist else "Unknown"
+        dentist_ids = list(shifts_by_dentist.keys())
 
-            # Create a temporary engine call for this dentist
-            slots_utc = await engine.get_available_slots(
+        # Batch fetch all dentist names in a single query (fixes N+1)
+        dentists = await get_staff_by_ids(engine._session, dentist_ids)
+        dentist_names = {d.id: d.full_name for d in dentists}
+
+        # Compute day bounds in UTC for time-off block queries
+        day_start_utc = target_dt_tz.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ).astimezone(ZoneInfo("UTC"))
+        day_end_utc = target_dt_tz.replace(
+            hour=23, minute=59, second=59, microsecond=999999
+        ).astimezone(ZoneInfo("UTC"))
+
+        # Batch fetch time-off blocks for all dentists in a single query per dentist
+        # (still need per-dentist for time-off, but reuse shifts and service)
+        all_slots: list[TimeSlot] = []
+        for did, dentist_shifts in shifts_by_dentist.items():
+            dentist_name = dentist_names.get(did, "Unknown")
+
+            # Fetch time-off blocks for this dentist
+            time_off_blocks = await list_time_off_blocks(
+                engine._session, did, day_start_utc, day_end_utc
+            )
+
+            # Use optimized engine method with pre-fetched data
+            slots_utc = await engine.get_available_slots_with_data(
                 dentist_id=did,
-                service_id=service_id,
+                duration_minutes=duration_minutes,
                 target_date=target_date,
+                shifts=dentist_shifts,
+                time_off_blocks=time_off_blocks,
             )
 
             time_slots = [

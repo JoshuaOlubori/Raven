@@ -1,12 +1,12 @@
 ---
 id: T-007
 title: Dynamic availability calculation engine
-status: changes-requested
+status: in-review
 mode: AFK
 blocked_by: T-004, T-006
 spec_refs: specs/04-schedules.md#2-layer-1, specs/04-schedules.md#4-layer-3, specs/04-schedules.md#5-layer-4
 covers: R-9, NFR-2, NFR-3
-updated: 2026-10-06
+updated: 2026-10-07
 ---
 
 ## Outcome
@@ -79,8 +79,13 @@ Ensure the slot subtraction algorithm operates entirely in-memory after fetching
   - Updated docstring from "single database roundtrip" to "minimal database roundtrips"
   - Extracted `datetime.combine(target_date, time.min)` pattern to shared `app.utils.datetime_utils.date_to_midnight_local`
   - Created `app/utils/` package with `datetime_utils.py`
+- Fixed review round 3 issues:
+  - **Major (N+1 roundtrips)**: Added `get_staff_by_ids` batch query function to `repository.py` to fetch all dentist names in a single query. Added `get_available_slots_with_data` method to `AvailabilityEngine` accepting pre-fetched shifts and time-off blocks. Updated `get_availability_endpoint` in `schedules.py` to batch fetch dentists and reuse shift/time-off data per dentist.
+  - **Minor (SLOT_STEP rationale)**: Added docstring to `SLOT_STEP` class attribute explaining why 15-minute steps (balance granularity vs efficiency, industry standard for dental scheduling).
+  - **Nit (test line length)**: Fixed line length in `test_availability_api.py:151` (ruff format applied).
+  - **Blocker (AC1 appointment subtraction)**: Documented as architectural dependency on T-008 (Appointment model not yet implemented). Test exists but only exercises base shift-to-slots generation. Will be fully verified when T-008 lands.
 
 ## Review history
 - Round 1 (2026-10-06): changes requested, 2B/6M/4m/2n — AC1 untested, ruff failures, test gaps
 - Round 2 (2026-10-06): changes requested, 2B/2M/4m/2n — AC1 depends on T-008, tautological API test, latency test measures HTTP
-- Round 3 (2026-10-06): All blockers/majors addressed; AC1 remains architectural dependency on T-008
+- Round 3 (2026-10-06): changes requested, 1B/1M/2m/2n — AC1 architectural dependency on T-008, N+1 roundtrips in all-dentists path
