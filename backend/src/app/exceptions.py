@@ -108,3 +108,56 @@ class DentistNotAvailableError(DomainError):
     error_code = "DENTIST_NOT_AVAILABLE"
     message = "Dentist has no shifts on the requested date"
     status_code = 200  # Returns empty slots per spec
+
+
+# ---------------------------------------------------------------------------
+# Appointment exceptions (Spec 05 §7)
+# ---------------------------------------------------------------------------
+
+
+class AppointmentOverlapConflictError(DomainError):
+    """Raised when a target booking interval overlaps an existing appointment."""
+
+    error_code = "APPOINTMENT_OVERLAP_CONFLICT"
+    message = "The requested time window overlaps an existing appointment"
+    status_code = 409
+
+
+class OutsideShiftHoursError(DomainError):
+    """Raised when a target booking interval falls outside dentist's shift hours."""
+
+    error_code = "OUTSIDE_SHIFT_HOURS"
+    message = "The requested time is outside the dentist's working hours"
+    status_code = 400
+
+
+class TimeOffConflictError(DomainError):
+    """Raised when a target booking interval intersects a dentist's time-off block."""
+
+    error_code = "TIME_OFF_CONFLICT"
+    message = "The requested time conflicts with the dentist's time off"
+    status_code = 409
+
+
+class AppointmentNotFoundError(DomainError):
+    """Raised when an appointment lookup by ID finds no match."""
+
+    error_code = "APPOINTMENT_NOT_FOUND"
+    message = "Appointment not found"
+    status_code = 404
+
+
+class InvalidStateTransitionError(DomainError):
+    """Raised when FSM does not permit transition from current status to requested."""
+
+    error_code = "INVALID_STATUS_TRANSITION"
+    message = "Invalid appointment state transition"
+    status_code = 400
+
+
+class CancellationReasonRequiredError(DomainError):
+    """Raised when cancellation is submitted without a reason."""
+
+    error_code = "CANCELLATION_REASON_REQUIRED"
+    message = "Cancellation reason is required"
+    status_code = 422

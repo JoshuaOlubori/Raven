@@ -14,6 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
+    from app.models.appointment import Appointment
     from app.models.schedule import TimeOffBlock, WorkingShift
 
 
@@ -33,5 +34,10 @@ class Staff(Base, UUIDMixin, TimestampMixin):
         back_populates="dentist", cascade="all, delete-orphan"
     )
     time_off_blocks: Mapped[list[TimeOffBlock]] = relationship(
+        back_populates="dentist", cascade="all, delete-orphan"
+    )
+
+    # Appointment relationships (Spec 05 §3)
+    appointments: Mapped[list[Appointment]] = relationship(
         back_populates="dentist", cascade="all, delete-orphan"
     )

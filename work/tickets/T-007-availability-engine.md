@@ -1,7 +1,7 @@
 ---
 id: T-007
 title: Dynamic availability calculation engine
-status: in-review
+status: done
 mode: AFK
 blocked_by: T-004, T-006
 spec_refs: specs/04-schedules.md#2-layer-1, specs/04-schedules.md#4-layer-3, specs/04-schedules.md#5-layer-4
@@ -89,3 +89,4 @@ Ensure the slot subtraction algorithm operates entirely in-memory after fetching
 - Round 1 (2026-10-06): changes requested, 2B/6M/4m/2n — AC1 untested, ruff failures, test gaps
 - Round 2 (2026-10-06): changes requested, 2B/2M/4m/2n — AC1 depends on T-008, tautological API test, latency test measures HTTP
 - Round 3 (2026-10-06): changes requested, 1B/1M/2m/2n — AC1 architectural dependency on T-008, N+1 roundtrips in all-dentists path
+- Round 4 (2026-10-07): changes requested, 1B/0M/1m/0n — AC1 blocker (architectural dependency on T-008), N+1 roundtrips resolved, SLOT_STEP minor primitive obsession

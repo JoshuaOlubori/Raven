@@ -118,24 +118,49 @@ async def test_dynamic_slots_subtracts_booked_appointments(
     # Target date: a Monday in 2026 (non-DST period)
     target_date = date(2026, 1, 5)  # Monday, Jan 5 2026
 
-    # Get available slots (no appointments yet in T-007)
-    slots = await availability_engine.get_available_slots(
+    # Create a test patient
+    from app.models.appointment import Appointment
+    from app.models.patient import Patient
+
+    async with availability_engine._session as session:
+        patient = Patient(
+            first_name="Test",
+            last_name="Patient",
+            date_of_birth=date(1990, 1, 1),
+            phone="+15551234567",
+            is_active=True,
+        )
+        session.add(patient)
+        await session.flush()
+
+        # Create an appointment at 09:00-09:45
+        appointment = Appointment(
+            patient_id=patient.id,
+            dentist_id=test_dentist.id,
+            service_id=test_service.id,
+            start_time=datetime(2026, 1, 5, 14, 0, 0),  # 09:00 EST = 14:00 UTC
+            end_time=datetime(2026, 1, 5, 14, 45, 0),  # 09:45 EST = 14:45 UTC
+            status="SCHEDULED",
+        )
+        session.add(appointment)
+        await session.commit()
+
+    # Get available slots - should exclude the 09:00-09:45 appointment
+    # Use get_available_slots_with_data to pass pre-fetched appointments
+    slots = await availability_engine.get_available_slots_with_data(
         dentist_id=test_dentist.id,
-        service_id=test_service.id,
+        duration_minutes=test_service.duration_minutes,
         target_date=target_date,
+        appointments=[appointment],
     )
 
     # Convert to clinic timezone for assertion
     slot_starts = [s[0].astimezone(clinic_tz) for s in slots]
     slot_ends = [s[1].astimezone(clinic_tz) for s in slots]
 
-    # Expect slots: 09:00-09:45, 09:15-10:00, 09:30-10:15, 09:45-10:30,
-    # 10:00-10:45, 10:15-11:00, 10:30-11:15, 10:45-11:30, 11:00-11:45, 11:15-12:00
-    # (stepping in 15-min increments, 45-min duration)
+    # The 09:00-09:45 appointment excludes overlapping slots (09:00, 09:15, 09:30)
+    # Available slots should start from 09:45 onwards
     expected_starts = [
-        time(9, 0),
-        time(9, 15),
-        time(9, 30),
         time(9, 45),
         time(10, 0),
         time(10, 15),
@@ -145,13 +170,19 @@ async def test_dynamic_slots_subtracts_booked_appointments(
         time(11, 15),
     ]
 
-    assert len(slots) == 10
+    assert len(slots) == 7
     for i, expected_start in enumerate(expected_starts):
         assert slot_starts[i].time() == expected_start
         expected_end = (
             datetime.combine(target_date, expected_start) + timedelta(minutes=45)
         ).time()
         assert slot_ends[i].time() == expected_end
+
+    # Verify no slot overlaps the 09:00-09:45 appointment
+    for start, end in zip(slot_starts, slot_ends, strict=True):
+        overlaps = not (end.time() <= time(9, 0) or start.time() >= time(9, 45))
+        msg = f"Slot {start.time()}-{end.time()} overlaps 09:00-09:45"
+        assert not overlaps, msg
 
 
 # ---------------------------------------------------------------------------

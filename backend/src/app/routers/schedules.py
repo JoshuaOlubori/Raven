@@ -221,6 +221,7 @@ async def get_availability_endpoint(
         get_service_by_id,
         get_staff_by_id,
         get_staff_by_ids,
+        list_appointments,
         list_shifts_by_day,
         list_time_off_blocks,
     )
@@ -236,11 +237,30 @@ async def get_availability_endpoint(
     duration_minutes = service.duration_minutes
 
     if dentist_id is not None:
-        # Single dentist query
-        slots_utc = await engine.get_available_slots(
+        # Single dentist query - fetch appointments and pass to engine
+        from app.db.repository import list_appointments
+        from app.utils.datetime_utils import date_to_midnight_local
+
+        target_dt_tz = date_to_midnight_local(target_date, engine._clinic_tz)
+        day_start_utc = target_dt_tz.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ).astimezone(ZoneInfo("UTC"))
+        day_end_utc = target_dt_tz.replace(
+            hour=23, minute=59, second=59, microsecond=999999
+        ).astimezone(ZoneInfo("UTC"))
+
+        appointments = await list_appointments(
+            engine._session,
             dentist_id=dentist_id,
-            service_id=service_id,
+            start_date=day_start_utc,
+            end_date=day_end_utc,
+        )
+
+        slots_utc = await engine.get_available_slots_with_data(
+            dentist_id=dentist_id,
+            duration_minutes=duration_minutes,
             target_date=target_date,
+            appointments=appointments,
         )
 
         dentist = await get_staff_by_id(engine._session, dentist_id)
@@ -283,13 +303,23 @@ async def get_availability_endpoint(
         dentists = await get_staff_by_ids(engine._session, dentist_ids)
         dentist_names = {d.id: d.full_name for d in dentists}
 
-        # Compute day bounds in UTC for time-off block queries
+        # Compute day bounds in UTC for time-off block and appointment queries
         day_start_utc = target_dt_tz.replace(
             hour=0, minute=0, second=0, microsecond=0
         ).astimezone(ZoneInfo("UTC"))
         day_end_utc = target_dt_tz.replace(
             hour=23, minute=59, second=59, microsecond=999999
         ).astimezone(ZoneInfo("UTC"))
+
+        # Fetch appointments for all dentists in the date range
+        all_appointments = await list_appointments(
+            engine._session,
+            start_date=day_start_utc,
+            end_date=day_end_utc,
+        )
+        appointments_by_dentist: dict[UUID, list] = defaultdict(list)
+        for appt in all_appointments:
+            appointments_by_dentist[appt.dentist_id].append(appt)
 
         # Batch fetch time-off blocks for all dentists in a single query per dentist
         # (still need per-dentist for time-off, but reuse shifts and service)
@@ -302,6 +332,9 @@ async def get_availability_endpoint(
                 engine._session, did, day_start_utc, day_end_utc
             )
 
+            # Get appointments for this dentist
+            dentist_appointments = appointments_by_dentist.get(did, [])
+
             # Use optimized engine method with pre-fetched data
             slots_utc = await engine.get_available_slots_with_data(
                 dentist_id=did,
@@ -309,6 +342,7 @@ async def get_availability_endpoint(
                 target_date=target_date,
                 shifts=dentist_shifts,
                 time_off_blocks=time_off_blocks,
+                appointments=dentist_appointments,
             )
 
             time_slots = [

@@ -11,7 +11,9 @@ from uuid import UUID
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
+from app.models.appointment import Appointment
 from app.models.patient import Patient
 from app.models.schedule import TimeOffBlock, WorkingShift
 from app.models.service import DentalService
@@ -360,3 +362,114 @@ async def delete_time_off_block(session: AsyncSession, block_id: UUID) -> bool:
     await session.delete(block)
     await session.flush()
     return True
+
+
+# ---------------------------------------------------------------------------
+# Appointment repository functions (Spec 05 §3 — Layer 2)
+# ---------------------------------------------------------------------------
+
+
+async def get_appointment(
+    session: AsyncSession, appointment_id: UUID
+) -> Appointment | None:
+    """Fetch a single appointment by primary key."""
+    return await session.get(Appointment, appointment_id)
+
+
+async def get_appointment_detail(
+    session: AsyncSession, appointment_id: UUID
+) -> Appointment | None:
+    """Fetch an appointment with eager-loaded patient, dentist, and service."""
+    from sqlalchemy.orm import joinedload
+
+    stmt = (
+        select(Appointment)
+        .options(
+            joinedload(Appointment.patient),
+            joinedload(Appointment.dentist),
+            joinedload(Appointment.service),
+        )
+        .where(Appointment.id == appointment_id)
+    )
+    result = await session.execute(stmt)
+    return result.unique().scalar_one_or_none()
+
+
+async def list_appointments(
+    session: AsyncSession,
+    dentist_id: UUID | None = None,
+    patient_id: UUID | None = None,
+    status: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+) -> list[Appointment]:
+    """Query appointments with optional filters."""
+    stmt = select(Appointment).options(
+        joinedload(Appointment.patient),
+        joinedload(Appointment.dentist),
+        joinedload(Appointment.service),
+    )
+    if dentist_id is not None:
+        stmt = stmt.where(Appointment.dentist_id == dentist_id)
+    if patient_id is not None:
+        stmt = stmt.where(Appointment.patient_id == patient_id)
+    if status is not None:
+        stmt = stmt.where(Appointment.status == status)
+    if start_date is not None:
+        stmt = stmt.where(Appointment.start_time >= start_date)
+    if end_date is not None:
+        stmt = stmt.where(Appointment.end_time <= end_date)
+    result = await session.execute(stmt)
+    return list(result.unique().scalars().all())
+
+
+async def check_appointment_overlap(
+    session: AsyncSession,
+    dentist_id: UUID,
+    start_time: datetime,
+    end_time: datetime,
+    exclude_id: UUID | None = None,
+) -> bool:
+    """Check for non-cancelled overlapping appointments for a dentist.
+
+    Two intervals [a, b) and [c, d) overlap iff max(a, c) < min(b, d).
+    Equivalent to: start_time < existing.end_time AND end_time > existing.start_time
+    """
+    from sqlalchemy import select
+
+    stmt = select(Appointment.id).where(
+        Appointment.dentist_id == dentist_id,
+        Appointment.status != "CANCELLED",
+        Appointment.start_time < end_time,
+        Appointment.end_time > start_time,
+    )
+    if exclude_id is not None:
+        stmt = stmt.where(Appointment.id != exclude_id)
+    # Under PostgreSQL: .with_for_update() ensures serializable conflict rejection
+    existing = await session.scalar(stmt)
+    return existing is not None
+
+
+async def create_appointment(
+    session: AsyncSession,
+    *,
+    patient_id: UUID,
+    dentist_id: UUID,
+    service_id: UUID,
+    start_time: datetime,
+    end_time: datetime,
+    status: str = "SCHEDULED",
+) -> Appointment:
+    """Insert a new appointment and return the persisted object."""
+    appointment = Appointment(
+        patient_id=patient_id,
+        dentist_id=dentist_id,
+        service_id=service_id,
+        start_time=start_time,
+        end_time=end_time,
+        status=status,
+    )
+    session.add(appointment)
+    await session.flush()
+    await session.refresh(appointment)
+    return appointment

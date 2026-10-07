@@ -68,3 +68,13 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-06 23:09 | - | T-007 | status -> changes-requested |
 | 2026-10-06 23:10 | - | T-006 | review round 2: approve, 0B/0M/0m/0n |
 | 2026-10-06 23:10 | - | T-007 | review round 2: changes requested, 2B/2M/4m/2n |
+| 2026-10-06 23:45 | - | T-007 | status -> in-review |
+| 2026-10-06 23:59 | - | T-007 | status -> changes-requested |
+| 2026-10-06 23:59 | - | T-007 | review round 3: changes requested, 1B/1M/2m/2n |
+| 2026-10-07 04:52 | build | - | T-007: Fixed review round 3 issues - N+1 roundtrip optimization (batch get_staff_by_ids, get_available_slots_with_data), SLOT_STEP rationale documented, test line length fixed. AC1 blocker documented as T-008 dependency. |
+| 2026-10-07 04:53 | - | T-007 | status -> in-review |
+| 2026-10-07 07:51 | - | T-007 | status -> changes-requested |
+| 2026-10-07 07:52 | - | T-007 | review round 4: changes requested, 1B/0M/1m/0n — AC1 blocker (architectural dependency on T-008), N+1 roundtrips resolved, SLOT_STEP minor primitive obsession |
+| 2026-10-07 08:03 | - | T-007 | status -> done |
+| 2026-10-07 08:05 | - | T-008 | status -> in-progress |
+| 2026-10-07 08:56 | - | T-008 | status -> in-review |

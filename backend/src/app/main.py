@@ -18,6 +18,9 @@ from starlette.responses import JSONResponse, Response
 
 from app.db.session import init_db
 from app.exceptions import DomainError
+from app.models.appointment import (  # noqa: F401 — register table on Base.metadata
+    Appointment,
+)
 from app.models.patient import (  # noqa: F401 — register table on Base.metadata
     Patient,
 )
@@ -29,6 +32,7 @@ from app.models.service import (
     DentalService,  # noqa: F401 — register table on Base.metadata
 )
 from app.models.staff import Staff  # noqa: F401 — register table on Base.metadata
+from app.routers.appointments import router as appointments_router
 from app.routers.auth import router as auth_router
 from app.routers.patients import router as patients_router
 from app.routers.schedules import router as schedules_router
@@ -53,6 +57,7 @@ app.include_router(services_router)
 app.include_router(staff_router)
 app.include_router(patients_router)
 app.include_router(schedules_router)
+app.include_router(appointments_router)
 
 
 @app.middleware("http")

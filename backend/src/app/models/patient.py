@@ -9,11 +9,15 @@ so that historical appointment data retains referential integrity (R-5).
 from __future__ import annotations
 
 from datetime import date
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, Index, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from app.models.appointment import Appointment
 
 
 class Patient(Base, UUIDMixin, TimestampMixin):
@@ -36,5 +40,6 @@ class Patient(Base, UUIDMixin, TimestampMixin):
     medical_alerts: Mapped[str | None] = mapped_column(default=None)
     is_active: Mapped[bool] = mapped_column(default=True)
 
-    # appointment relationship is declared in the appointment model
-    # (Spec 05) — referenced here for type-checking convenience only.
+    appointments: Mapped[list[Appointment]] = relationship(
+        back_populates="patient", cascade="all, delete-orphan"
+    )

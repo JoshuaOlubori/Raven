@@ -370,3 +370,94 @@ async def test_availability_latency_benchmark(
     # Should be well under 100ms for in-memory SQLite
     msg = f"Availability query took {elapsed_ms:.1f}ms (expected < 100ms)"
     assert elapsed_ms < 100, msg
+
+
+async def test_availability_subtracts_booked_appointments(
+    admin_staff: Staff,
+    receptionist_staff: Staff,
+    availability_dentist: Staff,
+    availability_service: DentalService,
+    auth_headers: callable,
+    client: AsyncClient,
+    test_session_local: async_sessionmaker,
+) -> None:
+    """R-9: Availability query subtracts booked appointments.
+
+    1. Book an appointment at 09:00-09:45
+    2. Query availability for 09:00-12:00 shift with 45-min service
+    3. Verify 09:00-09:45 slot is excluded, slots start from 09:15
+    """
+    from datetime import date, datetime, time
+    from zoneinfo import ZoneInfo
+
+    from app.models.patient import Patient
+
+    headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+    admin_headers = auth_headers(admin_staff.id, admin_staff.role)
+    clinic_tz = ZoneInfo("America/New_York")
+
+    # Create a patient
+    async with test_session_local() as session:
+        patient = Patient(
+            first_name="Test",
+            last_name="Patient",
+            date_of_birth=date(1990, 1, 1),
+            phone="+15551234567",
+            is_active=True,
+        )
+        session.add(patient)
+        await session.commit()
+        await session.refresh(patient)
+
+    # Book appointment at 09:00-09:45 (14:00-14:45 UTC)
+    start_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
+    book_resp = await client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patientId": str(patient.id),
+            "dentistId": str(availability_dentist.id),
+            "serviceId": str(availability_service.id),
+            "startTime": start_time,
+        },
+    )
+    assert book_resp.status_code == 201
+
+    # Query availability
+    response = await client.get(
+        "/api/v1/schedules/availability",
+        headers=admin_headers,
+        params={
+            "dentistId": str(availability_dentist.id),
+            "serviceId": str(availability_service.id),
+            "date": "2026-01-05",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    slots = body["slots"]
+
+    # Should have 7 slots (09:00, 09:15, 09:30 excluded due to 09:00-09:45 appointment)
+    assert len(slots) == 7
+
+    # First slot should be 09:45
+    first_slot_start = datetime.fromisoformat(
+        slots[0]["startTime"].replace("Z", "+00:00")
+    )
+    first_slot_local = first_slot_start.astimezone(clinic_tz)
+    assert first_slot_local.time() == time(9, 45)
+
+    # Verify no slot overlaps 09:00-09:45
+    for slot in slots:
+        slot_start = datetime.fromisoformat(
+            slot["startTime"].replace("Z", "+00:00")
+        ).astimezone(clinic_tz)
+        slot_end = datetime.fromisoformat(
+            slot["endTime"].replace("Z", "+00:00")
+        ).astimezone(clinic_tz)
+        overlaps = not (
+            slot_end.time() <= time(9, 0) or slot_start.time() >= time(9, 45)
+        )
+        msg = f"Slot {slot_start.time()}-{slot_end.time()} overlaps 09:00-09:45"
+        assert not overlaps, msg

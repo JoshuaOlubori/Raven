@@ -42,7 +42,14 @@ from sqlalchemy.pool import StaticPool
 from app.config import Settings
 from app.db.session import init_db
 from app.main import app
-from app.models.staff import Staff
+from app.models import (  # noqa: F401 — register all models on Base.metadata
+    Appointment,
+    DentalService,
+    Patient,
+    Staff,
+    TimeOffBlock,
+    WorkingShift,
+)
 from app.services.auth_service import AuthService
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"

@@ -1,12 +1,12 @@
 ---
 id: T-008
 title: Appointment booking and atomic overlap guard
-status: todo
+status: in-review
 mode: AFK
 blocked_by: T-005, T-007
 spec_refs: specs/05-appointments.md#2-layer-1, specs/05-appointments.md#3-layer-2, specs/05-appointments.md#4-layer-3, specs/05-appointments.md#5-layer-4
 covers: R-10, NFR-1
-updated: 2026-10-03
+updated: 2026-10-07
 ---
 
 ## Outcome
@@ -48,5 +48,35 @@ Rescheduling, cancellation, state machine transitions, and audit logs (handled i
 Follow ADR 0001 strictly: the overlap check must execute within the same database transaction as the insert.
 
 ## Implementation log
+- Created `src/app/models/appointment.py` with Appointment ORM model (UUID PK, FKs to patient/dentist/service, start/end time, status, cancellation_reason, reminder_sent_at, timestamps, composite index on dentist_id/start_time/end_time/status)
+- Updated `src/app/models/__init__.py` to export Appointment
+- Added `appointments` relationship to `Patient`, `Staff`, and `DentalService` models with `back_populates`
+- Added appointment repository functions to `src/app/db/repository.py`:
+  - `get_appointment`, `get_appointment_detail` (with joinedload on patient/dentist/service)
+  - `list_appointments` (with filters and eager loading)
+  - `check_appointment_overlap` (atomic overlap guard per ADR 0001)
+  - `create_appointment`
+- Added appointment exceptions to `src/app/exceptions.py`: `AppointmentOverlapConflictError`, `OutsideShiftHoursError`, `TimeOffConflictError`, `AppointmentNotFoundError`, `InvalidStateTransitionError`, `CancellationReasonRequiredError`
+- Created `src/app/services/appointment_service.py` with `AppointmentService`:
+  - `book_appointment` validates service, shift coverage, time-off conflict, appointment overlap
+  - Auto-calculates end_time from start_time + service duration
+  - `get_appointment_detail`, `list_appointments` with eager loading
+  - `_validate_shift_coverage`, `_validate_time_off_conflict` helpers
+- Added `AppointmentServiceDep` to `src/app/api/deps.py`
+- Added appointment schemas to `src/app/schemas.py`: `AppointmentCreate`, `AppointmentRead`, `AppointmentDetailRead`, `AppointmentStatus`
+- Created `src/app/routers/appointments.py`:
+  - `POST /api/v1/appointments` (Admin, Receptionist)
+  - `GET /api/v1/appointments` (All staff, with filters)
+  - `GET /api/v1/appointments/{id}` (All staff)
+- Registered appointments router in `src/app/main.py`
+- Updated `src/app/services/availability_engine.py` to include appointments in busy intervals
+- Updated `src/app/routers/schedules.py` to fetch and pass appointments to availability engine
+- Created unit tests:
+  - `tests/unit/test_appointment_service.py` (booking validation, shift/time-off/overlap checks, concurrent booking)
+  - `tests/unit/test_appointment_repository.py` (CRUD, eager loading N+1, overlap check variations)
+  - Updated `tests/unit/test_availability.py` to test appointment subtraction (AC1 from T-007)
+- Created API tests:
+  - `tests/api/test_appointments.py` (all 5 ACs + RBAC)
+  - Updated `tests/api/test_availability_api.py` to test appointment subtraction in availability query
 
 ## Review history

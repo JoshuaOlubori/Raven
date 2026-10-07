@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
 from app.db.session import SessionLocal
+from app.services.appointment_service import AppointmentService
 from app.services.auth_service import AuthService
 from app.services.availability_engine import AvailabilityEngine
 from app.services.patient_service import PatientService
@@ -123,3 +124,21 @@ def get_availability_engine(
 
 
 AvailabilityEngineDep = Annotated[AvailabilityEngine, Depends(get_availability_engine)]
+
+
+# ---------------------------------------------------------------------------
+# Appointment service dependency (Spec 05 §4 — Layer 3)
+# ---------------------------------------------------------------------------
+
+
+def get_appointment_service(
+    session: DbSessionDep,
+    settings: SettingsDep,
+) -> AppointmentService:
+    """Construct an ``AppointmentService`` with the request-scoped
+    session and settings.
+    """
+    return AppointmentService(session=session, settings=settings)
+
+
+AppointmentServiceDep = Annotated[AppointmentService, Depends(get_appointment_service)]

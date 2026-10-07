@@ -86,6 +86,7 @@ class AvailabilityEngine:
         target_date: date,
         shifts: list[WorkingShift] | None = None,
         time_off_blocks: list | None = None,
+        appointments: list | None = None,
     ) -> list[tuple[datetime, datetime]]:
         """Compute available slots using pre-fetched data (for batch optimization).
 
@@ -96,6 +97,8 @@ class AvailabilityEngine:
             shifts: Pre-fetched shifts for this dentist on the target weekday.
                    If None, fetches from database.
             time_off_blocks: Pre-fetched time-off blocks for this dentist
+                on the target date. If None, fetches from database.
+            appointments: Pre-fetched active appointments for this dentist
                 on the target date. If None, fetches from database.
 
         Returns:
@@ -126,11 +129,8 @@ class AvailabilityEngine:
                 self._session, dentist_id, day_start_utc, day_end_utc
             )
 
-        # 5. Build busy intervals from time-off blocks
-        # Note: Appointment model not implemented yet (T-008).
-        # When T-008 is complete, fetch active appointments (status != CANCELLED)
-        # and include them in busy_intervals.
-        busy_intervals = self._build_busy_intervals(time_off_blocks)
+        # 5. Build busy intervals from time-off blocks and appointments
+        busy_intervals = self._build_busy_intervals(time_off_blocks, appointments)
 
         # 6. Generate candidate slots from shifts
         slots = self._generate_slots_from_shifts(
@@ -142,8 +142,9 @@ class AvailabilityEngine:
     def _build_busy_intervals(
         self,
         time_off_blocks: list,
+        appointments: list | None = None,
     ) -> list[tuple[datetime, datetime]]:
-        """Build a list of busy intervals from time-off blocks.
+        """Build a list of busy intervals from time-off blocks and appointments.
 
         All intervals are normalized to UTC for comparison.
         """
@@ -154,6 +155,14 @@ class AvailabilityEngine:
             busy_start = block.start_time.replace(tzinfo=ZoneInfo("UTC"))
             busy_end = block.end_time.replace(tzinfo=ZoneInfo("UTC"))
             busy.append((busy_start, busy_end))
+
+        # Add active appointments (already in UTC, but naive - make them aware)
+        if appointments:
+            for appt in appointments:
+                if appt.status != "CANCELLED":
+                    busy_start = appt.start_time.replace(tzinfo=ZoneInfo("UTC"))
+                    busy_end = appt.end_time.replace(tzinfo=ZoneInfo("UTC"))
+                    busy.append((busy_start, busy_end))
 
         # Sort by start time
         busy.sort(key=lambda x: x[0])

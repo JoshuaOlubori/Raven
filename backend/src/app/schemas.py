@@ -89,7 +89,7 @@ class TokenResponse(BaseModel):
 class StaffRead(BaseModel):
     """Public staff representation with camelCase aliases (Spec 01 §2)."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, from_attributes=True)
 
     id: UUID
     email: EmailStr
@@ -139,7 +139,7 @@ class ServiceCreate(BaseModel):
 class ServiceRead(BaseModel):
     """Public service representation with camelCase aliases (Spec 03 §2)."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, from_attributes=True)
 
     id: UUID
     name: NonEmptyStr
@@ -222,7 +222,7 @@ class PatientUpdate(BaseModel):
 class PatientRead(BaseModel):
     """Public patient representation with camelCase aliases (Spec 02 §2)."""
 
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, from_attributes=True)
 
     id: UUID
     first_name: NonEmptyStr = Field(alias="firstName")
@@ -366,3 +366,58 @@ class AvailabilityResponse(BaseModel):
     service_id: UUID = Field(alias="serviceId")
     duration_minutes: int = Field(alias="durationMinutes")
     slots: list[TimeSlot]
+
+
+# ---------------------------------------------------------------------------
+# Appointment schemas (Spec 05 §2 — Layer 1)
+# ---------------------------------------------------------------------------
+
+
+AppointmentStatus = Literal[
+    "SCHEDULED",
+    "CONFIRMED",
+    "CHECKED_IN",
+    "IN_PROGRESS",
+    "COMPLETED",
+    "CANCELLED",
+    "NO_SHOW",
+]
+
+
+class AppointmentCreate(BaseModel):
+    """Appointment booking input — Spec 05 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    patient_id: UUID = Field(alias="patientId")
+    dentist_id: UUID = Field(alias="dentistId")
+    service_id: UUID = Field(alias="serviceId")
+    start_time: datetime = Field(alias="startTime")
+
+
+class AppointmentRead(BaseModel):
+    """Public appointment view with camelCase aliases — Spec 05 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: UUID
+    patient_id: UUID = Field(alias="patientId")
+    dentist_id: UUID = Field(alias="dentistId")
+    service_id: UUID = Field(alias="serviceId")
+    start_time: datetime = Field(alias="startTime")
+    end_time: datetime = Field(alias="endTime")
+    status: AppointmentStatus
+    cancellation_reason: str | None = Field(default=None, alias="cancellationReason")
+    reminder_sent_at: datetime | None = Field(default=None, alias="reminderSentAt")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+
+
+class AppointmentDetailRead(AppointmentRead):
+    """Rich appointment view with nested relations — Spec 05 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True, from_attributes=True)
+
+    patient: PatientRead
+    dentist: StaffRead
+    service: ServiceRead
