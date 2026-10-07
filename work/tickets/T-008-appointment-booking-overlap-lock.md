@@ -1,7 +1,7 @@
 ---
 id: T-008
 title: Appointment booking and atomic overlap guard
-status: in-review
+status: changes-requested
 mode: AFK
 blocked_by: T-005, T-007
 spec_refs: specs/05-appointments.md#2-layer-1, specs/05-appointments.md#3-layer-2, specs/05-appointments.md#4-layer-3, specs/05-appointments.md#5-layer-4
@@ -80,3 +80,6 @@ Follow ADR 0001 strictly: the overlap check must execute within the same databas
   - Updated `tests/api/test_availability_api.py` to test appointment subtraction in availability query
 
 ## Review history
+- **Round 1 (2026-10-07):** Changes requested — 1 blocker (missing `with_for_update()` in overlap check), 1 major (timezone handling inconsistency), 3 minor, 3 nit. Gates: ruff ✓, mypy ✓, pytest ✓ (103 passed). Report: `work/reviews/T-008-review-1.md`
+- **Round 2 (2026-10-07):** Changes requested � 1 blocker (with_for_update still absent), 2 major, 2 minor. Gates: ruff ?, mypy ?, pytest ? (103 passed). Report: `work/reviews/T-008-review-2.md`
+- ?? Second consecutive changes-requested. Next round: escalate to user.

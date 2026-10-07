@@ -78,3 +78,10 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-07 08:03 | - | T-007 | status -> done |
 | 2026-10-07 08:05 | - | T-008 | status -> in-progress |
 | 2026-10-07 08:56 | - | T-008 | status -> in-review |
+| 2026-10-07 10:45 | - | T-008 | status -> in-review |
+| 2026-10-07 10:47 | implement | - | T-008: Implemented appointment booking with atomic overlap guard. Added Appointment model, repository functions, service layer, API endpoints, and tests. Fixed DentalService table name to match FK. All 103 tests pass, quality gates (ruff, mypy, pytest) green. |
+| 2026-10-07 11:14 | - | T-008 | status -> changes-requested |
+| 2026-10-07 11:16 | - | T-008 | review round 1: changes-requested, 1 blocker, 1 major, 3 minor, 3 nit |
+
+## 2026-10-07 11:21 — T-008 review round 2: changes-requested (1B/2M/2m)
+No fix commit found between round 1 and round 2. All round-1 findings remain unaddressed. Blocker: missing with_for_update() in check_appointment_overlap (repository.py:868). This is the second consecutive changes-requested verdict. Implementer must address before next review.
