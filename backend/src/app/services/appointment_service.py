@@ -102,7 +102,7 @@ class AppointmentService:
 
         # Convert incoming timezone-aware datetime to UTC for storage
         if start_time.tzinfo is not None:
-            start_time = start_time.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+            start_time = start_time.astimezone(ZoneInfo("UTC"))  # keep tz-aware (UTC)
 
         duration = service.duration_minutes
         end_time = start_time + timedelta(minutes=duration)
@@ -222,9 +222,7 @@ class AppointmentService:
 
         # Convert incoming timezone-aware datetime to UTC for storage
         if new_start_time.tzinfo is not None:
-            new_start_time = new_start_time.astimezone(ZoneInfo("UTC")).replace(
-                tzinfo=None
-            )
+            new_start_time = new_start_time.astimezone(ZoneInfo("UTC"))  # tz-aware UTC
 
         duration = service.duration_minutes
         new_end_time = new_start_time + timedelta(minutes=duration)

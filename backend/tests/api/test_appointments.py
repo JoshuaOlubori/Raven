@@ -1249,11 +1249,12 @@ async def test_audit_logs_includes_reschedule_and_cancel(
 
 
 def test_audit_log_immutability_no_update_or_delete() -> None:
-    """No repository function exists to update or delete audit logs."""
+    """Audit logs are append-only: no SQL mutation endpoint exists (NFR-4)."""
     import inspect
 
     from app.db import repository
 
+    # Contract-level: no mutation functions present
     functions = [
         name
         for name, _ in inspect.getmembers(repository, inspect.isfunction)
@@ -1263,3 +1264,7 @@ def test_audit_log_immutability_no_update_or_delete() -> None:
     assert audit_functions == [], (
         f"Unexpected audit mutation functions found: {audit_functions}"
     )
+
+    # Behavioral-level: repository has no delete/update for audit
+    assert not hasattr(repository, "delete_audit_log")
+    assert not hasattr(repository, "update_audit_log")
