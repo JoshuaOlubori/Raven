@@ -427,9 +427,9 @@ class AppointmentService:
     # SCHEDULED/CONFIRMED -> NO_SHOW
 
     _VALID_TRANSITIONS: dict[str, list[str]] = {
-        "SCHEDULED": ["CONFIRMED", "CHECKED_IN", "CANCELLED", "NO_SHOW"],
-        "CONFIRMED": ["CHECKED_IN", "CANCELLED", "NO_SHOW"],
-        "CHECKED_IN": ["IN_PROGRESS", "CANCELLED"],
+        "SCHEDULED": ["CONFIRMED", "CHECKED_IN", "NO_SHOW"],
+        "CONFIRMED": ["CHECKED_IN", "NO_SHOW"],
+        "CHECKED_IN": ["IN_PROGRESS"],
         "IN_PROGRESS": ["COMPLETED"],
         "COMPLETED": [],  # Terminal
         "CANCELLED": [],  # Terminal

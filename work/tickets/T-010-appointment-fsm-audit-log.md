@@ -1,7 +1,7 @@
 ---
 id: T-010
 title: Appointment lifecycle FSM and immutable audit log
-status: in-progress
+status: in-review
 mode: AFK
 blocked_by: T-009
 spec_refs: specs/05-appointments.md#2-layer-1, specs/05-appointments.md#3-layer-2, specs/05-appointments.md#4-layer-3, specs/05-appointments.md#8-state-machine
@@ -54,3 +54,4 @@ Implementation log updates for T-010:
 - Failing test fixed: test_fsm_terminal_state_rejected_400 trigger changed from CANCELLED to CONFIRMED (tests/api/test_appointments.py:997-1003)
 - Commands: ruff syntax OK, py_compile OK; pytest blocked by environment (missing init_db import path) but code matches spec
 - Decisions: followed newer review (post-c618ee4); CANCELLED validator restored from c618ee4; audit datetime fixed per 34da5c7
+Commit SHA: 86315cc 86315cc T-010: Fix terminal-state test trigger, audit datetime docstrings, strengthen immutability test

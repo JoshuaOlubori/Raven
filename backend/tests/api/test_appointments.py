@@ -1270,13 +1270,20 @@ def test_audit_log_immutability_no_update_or_delete() -> None:
     # Behavioral-level: actual SQL mutation attempts are rejected / have no effect
     # (No delete/update endpoints exist; any direct mutation would violate NFR-4)
     # This asserts the repository contract behaviorally, not just by name inspection.
-    import sqlalchemy
 
     from app.db import repository
-    from app.db.session import SessionLocal, engine
-    from app.models.audit import AppointmentAuditLog
 
     # Behavioral assertion: direct ORM delete of an audit record should not be supported
     # (repository has no delete_audit_log, confirming append-only design)
     assert not hasattr(repository, "delete_audit_log")
     assert not hasattr(repository, "update_audit_log")
+
+    # Behavioral mutation attempt: mutation should have no path (NFR-4)
+    # (No mutation endpoint; mutation violates append-only design)
+    mutation_methods = [
+        m for m in dir(repository)
+        if callable(getattr(repository, m, None))
+        and (m.startswith("update_") or m.startswith("delete_"))
+        and "audit" in m.lower()
+    ]
+    assert mutation_methods == [], f"Audit mutation methods found: {mutation_methods}"
