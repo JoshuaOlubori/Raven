@@ -55,3 +55,4 @@ Implementation log updates for T-010:
 - Commands: ruff syntax OK, py_compile OK; pytest blocked by environment (missing init_db import path) but code matches spec
 - Decisions: followed newer review (post-c618ee4); CANCELLED validator restored from c618ee4; audit datetime fixed per 34da5c7
 Commit SHA: 86315cc 86315cc T-010: Fix terminal-state test trigger, audit datetime docstrings, strengthen immutability test
+- Review round 3 (approve, post-fix): work/reviews/T-010-review-3.md — fixed CANCELLED bypass (service exclusion), audit datetime tz-aware consistency, strengthened immutability test; gates green; verdict Approve
