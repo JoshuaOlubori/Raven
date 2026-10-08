@@ -1,12 +1,12 @@
 ---
 id: T-010
 title: Appointment lifecycle FSM and immutable audit log
-status: todo
+status: in-progress
 mode: AFK
 blocked_by: T-009
 spec_refs: specs/05-appointments.md#2-layer-1, specs/05-appointments.md#3-layer-2, specs/05-appointments.md#4-layer-3, specs/05-appointments.md#8-state-machine
 covers: R-12, R-14, NFR-4
-updated: 2026-10-03
+updated: 2026-10-08
 ---
 
 ## Outcome
@@ -45,5 +45,39 @@ Real-time SSE event broadcast and patient notification dispatch (handled in T-01
 Ensure `AppointmentAuditLog` has foreign keys to `Appointment` and `Staff`, and uses `joinedload(AppointmentAuditLog.actor)` to prevent N+1 query overhead.
 
 ## Implementation log
+- Created `AppointmentAuditLog` ORM model in `backend/src/app/models/audit.py` with fields: `id`, `appointment_id`, `actor_id`, `from_status`, `to_status`, `old_start_time`, `new_start_time`, `note`, `created_at`
+- Added `audit_logs` relationship to `Appointment` model with cascade delete-orphan
+- Added `AppointmentStatusUpdate` and `AuditLogRead` schemas to `backend/src/app/schemas.py`
+- Added repository functions `create_audit_log` and `list_audit_logs_for_appointment` with eager-loading on actor relationship
+- Implemented FSM transition logic in `AppointmentService.transition_status()` with validation:
+  - Valid transitions per Spec 05 §8
+  - Terminal state rejection (COMPLETED, CANCELLED, NO_SHOW)
+  - Dentist-only transitions for IN_PROGRESS and COMPLETED
+- Added audit logging helper `_create_audit_log()` for status transitions, reschedules, and cancellations
+- Updated `reschedule_appointment()` and `cancel_appointment()` to create audit log entries
+- Added API endpoints:
+  - `POST /api/v1/appointments/{id}/status` for FSM transitions (Admin, Receptionist, Dentist)
+  - `GET /api/v1/appointments/{id}/audit-logs` for chronological audit history (All staff)
+- Added unit tests for FSM transitions (4 tests) and API tests for status transitions and audit logs (6 tests)
+- All 121 tests pass, quality gates green (ruff, format, mypy, pytest)
+- Addressed review round 1 findings:
+  - Blocker (B1): Added `actor: StaffRead` binding to `AuditLogRead` schema; endpoint returns real `actorName` via eager-loaded `joinedload(AppointmentAuditLog.actor)`
+  - Major (M2): Added `test_audit_logs_are_immutable` repository-level immutability test (no update/delete functions exist)
+  - Major (actorName value assertion): Fixed `test_status_transition_creates_audit_log_entry` to assert `actorName == staff.full_name`
+  - Minor: Replaced deprecated `datetime.utcnow()` with `utcnow()` (timezone-aware) in audit model
+- Commit: T-010 review fixes
+
+Files touched:
+- `backend/src/app/models/audit.py` (new)
+- `backend/src/app/models/appointment.py` (added audit_logs relationship)
+- `backend/src/app/models/__init__.py` (export AppointmentAuditLog)
+- `backend/src/app/schemas.py` (added AppointmentStatusUpdate, AuditLogRead)
+- `backend/src/app/db/repository.py` (added create_audit_log, list_audit_logs_for_appointment)
+- `backend/src/app/services/appointment_service.py` (FSM transitions, audit logging)
+- `backend/src/app/routers/appointments.py` (status and audit-logs endpoints)
+- `backend/tests/unit/test_appointment_service.py` (FSM unit tests)
+- `backend/tests/api/test_appointments.py` (API tests)
 
 ## Review history
+
+- Review round 1: [work/reviews/T-010-review-1.md](work/reviews/T-010-review-1.md) — changes-requested (B1/M2/m4/n1)

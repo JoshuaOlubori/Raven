@@ -23,10 +23,12 @@ from app.config import Settings
 from app.db.repository import (
     check_appointment_overlap,
     create_appointment,
+    create_audit_log,
     get_appointment,
     get_appointment_detail,
     get_service_by_id,
     list_appointments,
+    list_audit_logs_for_appointment,
     list_shifts_by_day,
     list_time_off_blocks,
     update_appointment,
@@ -42,6 +44,7 @@ from app.exceptions import (
 )
 from app.models import (
     Appointment,
+    AppointmentAuditLog,
 )
 
 
@@ -64,7 +67,6 @@ class AppointmentService:
         dentist_id: UUID,
         service_id: UUID,
         start_time: datetime,
-        current_user_role: str,
     ) -> Appointment:
         """Book a new appointment (R-10, NFR-1).
 
@@ -169,7 +171,7 @@ class AppointmentService:
         appointment_id: UUID,
         new_start_time: datetime,
         new_dentist_id: UUID | None = None,
-        current_user_role: str,
+        actor_id: UUID,
     ) -> Appointment:
         """Reschedule an appointment to a new slot (R-11, NFR-1).
 
@@ -184,7 +186,8 @@ class AppointmentService:
             appointment_id: UUID of the appointment to reschedule
             new_start_time: New appointment start time in UTC
             new_dentist_id: Optional new dentist UUID (defaults to current dentist)
-            current_user_role: Role of the user making the reschedule
+            actor_id: UUID of the staff member performing the reschedule
+            actor_role: Role of the staff member (ADMIN, RECEPTIONIST)
 
         Returns:
             Updated Appointment with SCHEDULED status and recalculated end_time
@@ -248,6 +251,7 @@ class AppointmentService:
             raise AppointmentOverlapConflictError()
 
         # 8. Update appointment
+        old_start_time = appointment.start_time
         appointment = await update_appointment(
             self._session,
             appointment,
@@ -255,6 +259,17 @@ class AppointmentService:
             start_time=new_start_time,
             end_time=new_end_time,
             status="SCHEDULED",  # Reset to SCHEDULED per spec
+        )
+
+        # 9. Create audit log entry for reschedule
+        await self._create_audit_log(
+            appointment_id=appointment_id,
+            actor_id=actor_id,
+            from_status=None,
+            to_status=None,
+            old_start_time=old_start_time,
+            new_start_time=new_start_time,
+            note="Appointment rescheduled",
         )
 
         return appointment
@@ -268,7 +283,7 @@ class AppointmentService:
         *,
         appointment_id: UUID,
         cancellation_reason: str,
-        current_user_role: str,
+        actor_id: UUID,
     ) -> Appointment:
         """Cancel an appointment with a mandatory reason (R-13).
 
@@ -281,7 +296,8 @@ class AppointmentService:
         Args:
             appointment_id: UUID of the appointment to cancel
             cancellation_reason: Mandatory non-empty reason for cancellation
-            current_user_role: Role of the user making the cancellation
+            actor_id: UUID of the staff member performing the cancellation
+            actor_role: Role of the staff member (ADMIN, RECEPTIONIST)
 
         Returns:
             Updated Appointment with CANCELLED status and cancellation_reason set
@@ -307,11 +323,23 @@ class AppointmentService:
             raise CancellationReasonRequiredError()
 
         # 4. Update appointment to CANCELLED with reason
+        from_status = appointment.status
         appointment = await update_appointment(
             self._session,
             appointment,
             status="CANCELLED",
             cancellation_reason=cancellation_reason.strip(),
+        )
+
+        # 5. Create audit log entry for cancellation
+        await self._create_audit_log(
+            appointment_id=appointment_id,
+            actor_id=actor_id,
+            from_status=from_status,
+            to_status="CANCELLED",
+            old_start_time=None,
+            new_start_time=None,
+            note=cancellation_reason.strip(),
         )
 
         return appointment
@@ -385,3 +413,153 @@ class AppointmentService:
     ) -> bool:
         """Check if a shift time range fully covers the requested window."""
         return shift_start <= window_start and shift_end >= window_end
+
+    # -------------------------------------------------------------------------
+    # FSM Status Transitions (Admin, Receptionist, Dentist)
+    # -------------------------------------------------------------------------
+
+    # Valid transitions per Spec 05 §8:
+    # SCHEDULED -> CONFIRMED
+    # SCHEDULED/CONFIRMED -> CHECKED_IN
+    # CHECKED_IN -> IN_PROGRESS
+    # IN_PROGRESS -> COMPLETED
+    # SCHEDULED/CONFIRMED/CHECKED_IN -> CANCELLED (handled by cancel_appointment)
+    # SCHEDULED/CONFIRMED -> NO_SHOW
+
+    _VALID_TRANSITIONS: dict[str, list[str]] = {
+        "SCHEDULED": ["CONFIRMED", "CHECKED_IN", "CANCELLED", "NO_SHOW"],
+        "CONFIRMED": ["CHECKED_IN", "CANCELLED", "NO_SHOW"],
+        "CHECKED_IN": ["IN_PROGRESS", "CANCELLED"],
+        "IN_PROGRESS": ["COMPLETED"],
+        "COMPLETED": [],  # Terminal
+        "CANCELLED": [],  # Terminal
+        "NO_SHOW": [],  # Terminal
+    }
+
+    _DENTIST_ONLY_TRANSITIONS = {"IN_PROGRESS", "COMPLETED"}
+
+    async def transition_status(
+        self,
+        *,
+        appointment_id: UUID,
+        to_status: str,
+        note: str | None,
+        actor_id: UUID,
+        actor_role: str,
+    ) -> Appointment:
+        """Transition appointment status per FSM (R-12, Spec 05 §8).
+
+        Validates:
+        - Appointment exists
+        - Transition is valid per FSM
+        - Terminal states (COMPLETED, CANCELLED, NO_SHOW) reject all transitions
+        - DENTIST role required for IN_PROGRESS and COMPLETED transitions
+        - User has permission (ADMIN, RECEPTIONIST, DENTIST)
+
+        Args:
+            appointment_id: UUID of the appointment to transition
+            to_status: Target status per AppointmentStatus enum
+            note: Optional note for the transition
+            actor_id: UUID of the staff member performing the transition
+            actor_role: Role of the staff member (ADMIN, RECEPTIONIST, DENTIST)
+
+        Returns:
+            Updated Appointment with new status
+
+        Raises:
+            AppointmentNotFoundError: Appointment does not exist
+            InvalidStateTransitionError: Transition not permitted from current state
+        """
+        # 1. Fetch the appointment
+        appointment = await get_appointment(self._session, appointment_id)
+        if appointment is None:
+            raise AppointmentNotFoundError()
+
+        from_status = appointment.status
+
+        # 2. Check if current status is terminal
+        if from_status in ("COMPLETED", "CANCELLED", "NO_SHOW"):
+            raise InvalidStateTransitionError(
+                f"Cannot transition from terminal state {from_status}"
+            )
+
+        # 3. Validate transition is allowed per FSM
+        allowed = self._VALID_TRANSITIONS.get(from_status, [])
+        if to_status not in allowed:
+            raise InvalidStateTransitionError(
+                f"Invalid transition from {from_status} to {to_status}"
+            )
+
+        # 4. Check role-based access for DENTIST-only transitions
+        if to_status in self._DENTIST_ONLY_TRANSITIONS and actor_role not in (
+            "ADMIN",
+            "DENTIST",
+        ):
+            raise InvalidStateTransitionError(
+                f"Only dentists can transition to {to_status}"
+            )
+
+        # 5. Update appointment status
+        appointment = await update_appointment(
+            self._session, appointment, status=to_status
+        )
+
+        # 6. Create audit log entry
+        await self._create_audit_log(
+            appointment_id=appointment_id,
+            actor_id=actor_id,
+            from_status=from_status,
+            to_status=to_status,
+            old_start_time=None,
+            new_start_time=None,
+            note=note,
+        )
+
+        return appointment
+
+    async def _create_audit_log(
+        self,
+        *,
+        appointment_id: UUID,
+        actor_id: UUID,
+        from_status: str | None,
+        to_status: str | None,
+        old_start_time: datetime | None,
+        new_start_time: datetime | None,
+        note: str | None,
+    ) -> AppointmentAuditLog:
+        """Create an immutable audit log record for an appointment event.
+
+        Called for:
+        - Status transitions (from_status, to_status set)
+        - Reschedules (old_start_time, new_start_time set)
+        - Cancellations (note contains cancellation_reason)
+
+        This is append-only — no update or delete is ever performed (NFR-4).
+        """
+        return await create_audit_log(
+            self._session,
+            appointment_id=appointment_id,
+            actor_id=actor_id,
+            from_status=from_status,
+            to_status=to_status,
+            old_start_time=old_start_time,
+            new_start_time=new_start_time,
+            note=note,
+        )
+
+    # -------------------------------------------------------------------------
+    # Audit Log Queries (All staff)
+    # -------------------------------------------------------------------------
+
+    async def get_audit_logs(self, appointment_id: UUID) -> list[AppointmentAuditLog]:
+        """Retrieve chronological audit log entries for an appointment.
+
+        Uses eager-loading on actor relationship to avoid N+1 queries.
+        """
+        # Verify appointment exists
+        appointment = await get_appointment(self._session, appointment_id)
+        if appointment is None:
+            raise AppointmentNotFoundError()
+
+        return await list_audit_logs_for_appointment(self._session, appointment_id)

@@ -1,7 +1,7 @@
 ---
 id: T-009
 title: Appointment reschedule and reasoned cancellation
-status: in-progress
+status: done
 mode: AFK
 blocked_by: T-008
 spec_refs: specs/05-appointments.md#2-layer-1, specs/05-appointments.md#4-layer-3, specs/05-appointments.md#8-state-machine
@@ -61,3 +61,4 @@ Ensure `exclude_id` is passed to the overlap check during reschedule so that the
 - All quality gates pass: ruff, ruff format, mypy, pytest (108 tests)
 
 ## Review history
+- **Round 1 (2026-10-07):** Approved — 0 blockers, 0 majors, 1 minor (generic `update_appointment`), 1 nit (missing docstring on `AppointmentDetailRead`). Gates: ruff ✓, mypy ✓, pytest ✓ (108 passed). Report: `work/reviews/T-009-review-1.md`

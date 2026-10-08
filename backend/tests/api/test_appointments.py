@@ -792,3 +792,474 @@ async def test_cancel_appointment_without_reason_rejected_422(
     assert len(body["detail"]) == 1
     assert body["detail"][0]["loc"] == ["body", "cancellationReason"]
     assert "at least 1" in body["detail"][0]["msg"]
+
+
+# ---------------------------------------------------------------------------
+# T-010: Status Transition (FSM) and Audit Log Tests
+# ---------------------------------------------------------------------------
+
+
+async def test_status_transition_confirmed_to_checked_in_200(
+    receptionist_staff: Staff,
+    test_dentist: Staff,
+    test_patient: Staff,
+    test_service: Staff,
+    auth_headers: callable,
+    client: AsyncClient,
+) -> None:
+    """R-12: Receptionist transitions SCHEDULED -> CONFIRMED -> CHECKED_IN."""
+    headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+    clinic_tz = ZoneInfo("America/New_York")
+    start_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
+
+    # Create appointment
+    create_resp = await client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patientId": str(test_patient.id),
+            "dentistId": str(test_dentist.id),
+            "serviceId": str(test_service.id),
+            "startTime": start_time,
+        },
+    )
+    assert create_resp.status_code == 201
+    appointment_id = UUID(create_resp.json()["id"])
+
+    # SCHEDULED -> CONFIRMED
+    resp = await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=headers,
+        json={"toStatus": "CONFIRMED", "note": "Patient confirmed"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "CONFIRMED"
+
+    # CONFIRMED -> CHECKED_IN
+    resp = await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=headers,
+        json={"toStatus": "CHECKED_IN", "note": "Patient checked in"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "CHECKED_IN"
+
+
+async def test_status_transition_checked_in_to_in_progress_200(
+    dentist_staff: Staff,
+    receptionist_staff: Staff,
+    test_dentist: Staff,
+    test_patient: Staff,
+    test_service: Staff,
+    auth_headers: callable,
+    client: AsyncClient,
+) -> None:
+    """R-12: Dentist transitions CHECKED_IN -> IN_PROGRESS."""
+    headers = auth_headers(dentist_staff.id, dentist_staff.role)
+    rec_headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+    clinic_tz = ZoneInfo("America/New_York")
+    start_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
+
+    # Create appointment using receptionist
+    create_resp = await client.post(
+        "/api/v1/appointments",
+        headers=rec_headers,
+        json={
+            "patientId": str(test_patient.id),
+            "dentistId": str(test_dentist.id),
+            "serviceId": str(test_service.id),
+            "startTime": start_time,
+        },
+    )
+    assert create_resp.status_code == 201
+    appointment_id = UUID(create_resp.json()["id"])
+
+    # Move to CHECKED_IN via receptionist
+    await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=rec_headers,
+        json={"toStatus": "CONFIRMED"},
+    )
+    await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=rec_headers,
+        json={"toStatus": "CHECKED_IN"},
+    )
+
+    # Dentist transitions to IN_PROGRESS
+    resp = await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=headers,
+        json={"toStatus": "IN_PROGRESS", "note": "Treatment started"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "IN_PROGRESS"
+
+
+async def test_status_transition_in_progress_to_completed_200(
+    dentist_staff: Staff,
+    receptionist_staff: Staff,
+    test_dentist: Staff,
+    test_patient: Staff,
+    test_service: Staff,
+    auth_headers: callable,
+    client: AsyncClient,
+) -> None:
+    """R-12: Dentist transitions IN_PROGRESS -> COMPLETED."""
+    headers = auth_headers(dentist_staff.id, dentist_staff.role)
+    rec_headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+    clinic_tz = ZoneInfo("America/New_York")
+    start_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
+
+    # Create appointment and move to IN_PROGRESS
+    create_resp = await client.post(
+        "/api/v1/appointments",
+        headers=rec_headers,
+        json={
+            "patientId": str(test_patient.id),
+            "dentistId": str(test_dentist.id),
+            "serviceId": str(test_service.id),
+            "startTime": start_time,
+        },
+    )
+    assert create_resp.status_code == 201
+    appointment_id = UUID(create_resp.json()["id"])
+
+    # Move through states
+    for status in ["CONFIRMED", "CHECKED_IN", "IN_PROGRESS"]:
+        await client.post(
+            f"/api/v1/appointments/{appointment_id}/status",
+            headers=rec_headers if status != "IN_PROGRESS" else headers,
+            json={"toStatus": status},
+        )
+
+    # Dentist transitions to COMPLETED
+    resp = await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=headers,
+        json={"toStatus": "COMPLETED", "note": "Treatment completed"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "COMPLETED"
+
+
+async def test_status_transition_terminal_state_rejected_400(
+    receptionist_staff: Staff,
+    dentist_staff: Staff,
+    test_dentist: Staff,
+    test_patient: Staff,
+    test_service: Staff,
+    auth_headers: callable,
+    client: AsyncClient,
+) -> None:
+    """R-12: Transition from COMPLETED state returns 400 INVALID_STATUS_TRANSITION."""
+    headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+    dentist_headers = auth_headers(dentist_staff.id, dentist_staff.role)
+    clinic_tz = ZoneInfo("America/New_York")
+    start_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
+
+    # Create appointment
+    create_resp = await client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patientId": str(test_patient.id),
+            "dentistId": str(test_dentist.id),
+            "serviceId": str(test_service.id),
+            "startTime": start_time,
+        },
+    )
+    assert create_resp.status_code == 201
+    appointment_id = UUID(create_resp.json()["id"])
+
+    # Move to COMPLETED using correct roles
+    await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=headers,
+        json={"toStatus": "CONFIRMED"},
+    )
+    await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=headers,
+        json={"toStatus": "CHECKED_IN"},
+    )
+    await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=dentist_headers,
+        json={"toStatus": "IN_PROGRESS"},
+    )
+    await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=dentist_headers,
+        json={"toStatus": "COMPLETED"},
+    )
+
+    # Try to transition from COMPLETED - should fail
+    resp = await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=headers,
+        json={"toStatus": "CANCELLED"},
+    )
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["error"] == "INVALID_STATUS_TRANSITION"
+    assert "terminal state" in body["message"].lower()
+
+
+async def test_receptionist_cannot_transition_to_in_progress_403(
+    receptionist_staff: Staff,
+    test_dentist: Staff,
+    test_patient: Staff,
+    test_service: Staff,
+    auth_headers: callable,
+    client: AsyncClient,
+) -> None:
+    """R-12: Receptionist cannot transition to IN_PROGRESS (dentist only)."""
+    headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+    clinic_tz = ZoneInfo("America/New_York")
+    start_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
+
+    # Create appointment and move to CHECKED_IN
+    create_resp = await client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patientId": str(test_patient.id),
+            "dentistId": str(test_dentist.id),
+            "serviceId": str(test_service.id),
+            "startTime": start_time,
+        },
+    )
+    assert create_resp.status_code == 201
+    appointment_id = UUID(create_resp.json()["id"])
+
+    await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=headers,
+        json={"toStatus": "CONFIRMED"},
+    )
+    await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=headers,
+        json={"toStatus": "CHECKED_IN"},
+    )
+
+    # Receptionist tries IN_PROGRESS - should fail with 400
+    # (not 403 - it's an invalid transition for the role)
+    resp = await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=headers,
+        json={"toStatus": "IN_PROGRESS"},
+    )
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body["error"] == "INVALID_STATUS_TRANSITION"
+    assert "only dentists" in body["message"].lower()
+
+
+async def test_status_transition_creates_audit_log_entry(
+    receptionist_staff: Staff,
+    test_dentist: Staff,
+    test_patient: Staff,
+    test_service: Staff,
+    auth_headers: callable,
+    client: AsyncClient,
+) -> None:
+    """R-14: Status transition creates audit log entry
+    with actor_id, from_status, to_status."""
+    headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+    clinic_tz = ZoneInfo("America/New_York")
+    start_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
+
+    # Create appointment
+    create_resp = await client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patientId": str(test_patient.id),
+            "dentistId": str(test_dentist.id),
+            "serviceId": str(test_service.id),
+            "startTime": start_time,
+        },
+    )
+    assert create_resp.status_code == 201
+    appointment_id = UUID(create_resp.json()["id"])
+
+    # Transition to CONFIRMED
+    await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=headers,
+        json={"toStatus": "CONFIRMED", "note": "Patient confirmed"},
+    )
+
+    # Fetch audit logs
+    audit_resp = await client.get(
+        f"/api/v1/appointments/{appointment_id}/audit-logs",
+        headers=headers,
+    )
+    assert audit_resp.status_code == 200
+    logs = audit_resp.json()
+
+    # Should have at least one audit log entry for the status transition
+    assert len(logs) >= 1
+    latest_log = logs[-1]
+    assert latest_log["fromStatus"] == "SCHEDULED"
+    assert latest_log["toStatus"] == "CONFIRMED"
+    assert latest_log["actorId"] == str(receptionist_staff.id)
+    assert latest_log["note"] == "Patient confirmed"
+    assert latest_log["actorName"] == receptionist_staff.full_name
+    assert "createdAt" in latest_log
+
+
+async def test_audit_logs_endpoint_returns_chronological_history(
+    receptionist_staff: Staff,
+    test_dentist: Staff,
+    test_patient: Staff,
+    test_service: Staff,
+    auth_headers: callable,
+    client: AsyncClient,
+) -> None:
+    """R-14: GET /audit-logs returns chronological history with actor names."""
+    headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+    clinic_tz = ZoneInfo("America/New_York")
+    start_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
+
+    # Create appointment
+    create_resp = await client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patientId": str(test_patient.id),
+            "dentistId": str(test_dentist.id),
+            "serviceId": str(test_service.id),
+            "startTime": start_time,
+        },
+    )
+    assert create_resp.status_code == 201
+    appointment_id = UUID(create_resp.json()["id"])
+
+    # Make multiple transitions
+    await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=headers,
+        json={"toStatus": "CONFIRMED", "note": "Step 1"},
+    )
+    await client.post(
+        f"/api/v1/appointments/{appointment_id}/status",
+        headers=headers,
+        json={"toStatus": "CHECKED_IN", "note": "Step 2"},
+    )
+
+    # Fetch audit logs
+    audit_resp = await client.get(
+        f"/api/v1/appointments/{appointment_id}/audit-logs",
+        headers=headers,
+    )
+    assert audit_resp.status_code == 200
+    logs = audit_resp.json()
+
+    # Should have at least 2 entries, ordered by created_at
+    assert len(logs) >= 2
+    # Check chronological order (created_at ascending)
+    for i in range(len(logs) - 1):
+        assert logs[i]["createdAt"] <= logs[i + 1]["createdAt"]
+
+    # Check structure of each log entry
+    for log in logs:
+        assert "id" in log
+        assert "appointmentId" in log
+        assert "actorId" in log
+        assert "actorName" in log
+        assert "fromStatus" in log
+        assert "toStatus" in log
+        assert "note" in log
+        assert "createdAt" in log
+
+
+async def test_audit_logs_includes_reschedule_and_cancel(
+    receptionist_staff: Staff,
+    test_dentist: Staff,
+    test_patient: Staff,
+    test_service: Staff,
+    auth_headers: callable,
+    client: AsyncClient,
+) -> None:
+    """R-14: Audit logs include reschedule and cancellation entries."""
+    headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+    clinic_tz = ZoneInfo("America/New_York")
+    start_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
+
+    # Create appointment
+    create_resp = await client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patientId": str(test_patient.id),
+            "dentistId": str(test_dentist.id),
+            "serviceId": str(test_service.id),
+            "startTime": start_time,
+        },
+    )
+    assert create_resp.status_code == 201
+    appointment_id = UUID(create_resp.json()["id"])
+
+    # Reschedule
+    new_start = datetime(2026, 1, 5, 10, 0, 0, tzinfo=clinic_tz).isoformat()
+    await client.post(
+        f"/api/v1/appointments/{appointment_id}/reschedule",
+        headers=headers,
+        json={"startTime": new_start},
+    )
+
+    # Cancel
+    await client.post(
+        f"/api/v1/appointments/{appointment_id}/cancel",
+        headers=headers,
+        json={"cancellationReason": "Patient cancelled"},
+    )
+
+    # Fetch audit logs
+    audit_resp = await client.get(
+        f"/api/v1/appointments/{appointment_id}/audit-logs",
+        headers=headers,
+    )
+    assert audit_resp.status_code == 200
+    logs = audit_resp.json()
+
+    # Should have entries for: reschedule, cancel (and possibly status transitions)
+    assert len(logs) >= 2
+
+    # Check reschedule entry exists (no from/to status, but has old/new start time)
+    reschedule_log = next(
+        (log for log in logs if log.get("oldStartTime") and log.get("newStartTime")),
+        None,
+    )
+    assert reschedule_log is not None
+    assert reschedule_log["note"] == "Appointment rescheduled"
+
+    # Check cancel entry exists (has from_status, to_status=CANCELLED, note=reason)
+    cancel_log = next((log for log in logs if log.get("toStatus") == "CANCELLED"), None)
+    assert cancel_log is not None
+    assert cancel_log["note"] == "Patient cancelled"
+
+
+# ---------------------------------------------------------------------------
+# T-010: Audit immutability (NFR-4, AC6) — repository-level
+# ---------------------------------------------------------------------------
+
+
+def test_audit_log_immutability_no_update_or_delete() -> None:
+    """No repository function exists to update or delete audit logs."""
+    import inspect
+
+    from app.db import repository
+
+    functions = [
+        name
+        for name, _ in inspect.getmembers(repository, inspect.isfunction)
+        if name.startswith("update_") or name.startswith("delete_")
+    ]
+    audit_functions = [f for f in functions if "audit" in f.lower()]
+    assert audit_functions == [], (
+        f"Unexpected audit mutation functions found: {audit_functions}"
+    )

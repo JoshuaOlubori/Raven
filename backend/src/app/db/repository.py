@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.models.appointment import Appointment
+from app.models.audit import AppointmentAuditLog
 from app.models.patient import Patient
 from app.models.schedule import TimeOffBlock, WorkingShift
 from app.models.service import DentalService
@@ -493,3 +494,57 @@ async def update_appointment(
     await session.flush()
     await session.refresh(appointment)
     return appointment
+
+
+# ---------------------------------------------------------------------------
+# Audit log repository functions (Spec 05 §3 — Layer 2)
+# ---------------------------------------------------------------------------
+
+
+async def create_audit_log(
+    session: AsyncSession,
+    *,
+    appointment_id: UUID,
+    actor_id: UUID,
+    from_status: str | None,
+    to_status: str | None,
+    old_start_time: datetime | None,
+    new_start_time: datetime | None,
+    note: str | None,
+) -> AppointmentAuditLog:
+    """Insert a new audit log record and return the persisted object.
+
+    This function is append-only — no update or delete operations are provided
+    to maintain audit log immutability (NFR-4).
+    """
+    audit_log = AppointmentAuditLog(
+        appointment_id=appointment_id,
+        actor_id=actor_id,
+        from_status=from_status,
+        to_status=to_status,
+        old_start_time=old_start_time,
+        new_start_time=new_start_time,
+        note=note,
+    )
+    session.add(audit_log)
+    await session.flush()
+    await session.refresh(audit_log)
+    return audit_log
+
+
+async def list_audit_logs_for_appointment(
+    session: AsyncSession, appointment_id: UUID
+) -> list[AppointmentAuditLog]:
+    """List all audit log entries for an appointment, ordered chronologically.
+
+    Uses joinedload to eager-load the actor (staff) relationship to avoid N+1
+    query overhead (Spec 05 §3 — Eager-Loading Strategy).
+    """
+    stmt = (
+        select(AppointmentAuditLog)
+        .options(joinedload(AppointmentAuditLog.actor))
+        .where(AppointmentAuditLog.appointment_id == appointment_id)
+        .order_by(AppointmentAuditLog.created_at)
+    )
+    result = await session.execute(stmt)
+    return list(result.unique().scalars().all())

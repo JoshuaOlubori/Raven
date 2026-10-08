@@ -149,7 +149,6 @@ async def test_book_appointment_success(
         dentist_id=test_dentist.id,
         service_id=test_service.id,
         start_time=target_date,
-        current_user_role="RECEPTIONIST",
     )
 
     assert appointment.status == "SCHEDULED"
@@ -189,7 +188,6 @@ async def test_booking_outside_shift_rejected(
             dentist_id=test_dentist.id,
             service_id=test_service.id,
             start_time=target_date,
-            current_user_role="RECEPTIONIST",
         )
 
 
@@ -212,7 +210,6 @@ async def test_booking_on_non_shift_day_rejected(
             dentist_id=test_dentist.id,
             service_id=test_service.id,
             start_time=target_date,
-            current_user_role="RECEPTIONIST",
         )
 
 
@@ -256,7 +253,6 @@ async def test_booking_overlapping_time_off_rejected(
             dentist_id=test_dentist.id,
             service_id=test_service.id,
             start_time=target_date,
-            current_user_role="RECEPTIONIST",
         )
 
 
@@ -298,7 +294,6 @@ async def test_concurrent_booking_overlap_prevention(
                 dentist_id=test_dentist.id,
                 service_id=test_service.id,
                 start_time=target_date,
-                current_user_role="RECEPTIONIST",
             )
             return True
         except AppointmentOverlapConflictError:
@@ -350,7 +345,6 @@ async def test_booking_inactive_service_rejected(
             dentist_id=test_dentist.id,
             service_id=service.id,
             start_time=target_date,
-            current_user_role="RECEPTIONIST",
         )
 
 
@@ -371,5 +365,288 @@ async def test_booking_nonexistent_service_rejected(
             dentist_id=test_dentist.id,
             service_id=uuid4(),
             start_time=target_date,
-            current_user_role="RECEPTIONIST",
         )
+
+
+# ---------------------------------------------------------------------------
+# FSM State Machine Tests (T-010)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def test_receptionist(test_session_local) -> Staff:
+    """Create a test receptionist."""
+    async with test_session_local() as session:
+        receptionist = Staff(
+            email=f"receptionist-{uuid4().hex[:8]}@clinic.com",
+            hashed_password="irrelevant",
+            full_name="Test Receptionist",
+            role="RECEPTIONIST",
+            is_active=True,
+        )
+        session.add(receptionist)
+        await session.commit()
+        await session.refresh(receptionist)
+        return receptionist
+
+
+@pytest.fixture
+async def test_admin(test_session_local) -> Staff:
+    """Create a test admin."""
+    async with test_session_local() as session:
+        admin = Staff(
+            email=f"admin-{uuid4().hex[:8]}@clinic.com",
+            hashed_password="irrelevant",
+            full_name="Test Admin",
+            role="ADMIN",
+            is_active=True,
+        )
+        session.add(admin)
+        await session.commit()
+        await session.refresh(admin)
+        return admin
+
+
+@pytest.fixture
+async def booked_appointment(
+    appointment_service: AppointmentService,
+    test_dentist: Staff,
+    test_patient,
+    test_service: DentalService,
+    monday_shift: WorkingShift,
+    clinic_tz: ZoneInfo,
+) -> Staff:
+    """Create a booked appointment in SCHEDULED state."""
+    target_date = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).astimezone(
+        ZoneInfo("UTC")
+    )
+    appointment = await appointment_service.book_appointment(
+        patient_id=test_patient.id,
+        dentist_id=test_dentist.id,
+        service_id=test_service.id,
+        start_time=target_date,
+    )
+    return appointment
+
+
+async def test_fsm_valid_lifecycle_transitions(
+    appointment_service: AppointmentService,
+    booked_appointment,
+    test_dentist: Staff,
+    test_receptionist: Staff,
+) -> None:
+    """Test 1: Valid FSM transitions SCHEDULED -> CONFIRMED ->
+    CHECKED_IN -> IN_PROGRESS -> COMPLETED."""
+    appointment = booked_appointment
+
+    # SCHEDULED -> CONFIRMED (receptionist)
+    appointment = await appointment_service.transition_status(
+        appointment_id=appointment.id,
+        to_status="CONFIRMED",
+        note="Patient confirmed",
+        actor_id=test_receptionist.id,
+        actor_role="RECEPTIONIST",
+    )
+    assert appointment.status == "CONFIRMED"
+
+    # CONFIRMED -> CHECKED_IN (receptionist)
+    appointment = await appointment_service.transition_status(
+        appointment_id=appointment.id,
+        to_status="CHECKED_IN",
+        note="Patient checked in",
+        actor_id=test_receptionist.id,
+        actor_role="RECEPTIONIST",
+    )
+    assert appointment.status == "CHECKED_IN"
+
+    # CHECKED_IN -> IN_PROGRESS (dentist)
+    appointment = await appointment_service.transition_status(
+        appointment_id=appointment.id,
+        to_status="IN_PROGRESS",
+        note="Treatment started",
+        actor_id=test_dentist.id,
+        actor_role="DENTIST",
+    )
+    assert appointment.status == "IN_PROGRESS"
+
+    # IN_PROGRESS -> COMPLETED (dentist)
+    appointment = await appointment_service.transition_status(
+        appointment_id=appointment.id,
+        to_status="COMPLETED",
+        note="Treatment completed",
+        actor_id=test_dentist.id,
+        actor_role="DENTIST",
+    )
+    assert appointment.status == "COMPLETED"
+
+
+async def test_fsm_terminal_state_rejects_transition(
+    appointment_service: AppointmentService,
+    booked_appointment,
+    test_dentist: Staff,
+    test_receptionist: Staff,
+) -> None:
+    """Test 2: Terminal states (COMPLETED, CANCELLED, NO_SHOW)
+    reject all transitions."""
+    from app.exceptions import InvalidStateTransitionError
+
+    appointment = booked_appointment
+
+    # First transition to COMPLETED
+    appointment = await appointment_service.transition_status(
+        appointment_id=appointment.id,
+        to_status="CONFIRMED",
+        note="Confirmed",
+        actor_id=test_receptionist.id,
+        actor_role="RECEPTIONIST",
+    )
+    appointment = await appointment_service.transition_status(
+        appointment_id=appointment.id,
+        to_status="CHECKED_IN",
+        note="Checked in",
+        actor_id=test_receptionist.id,
+        actor_role="RECEPTIONIST",
+    )
+    appointment = await appointment_service.transition_status(
+        appointment_id=appointment.id,
+        to_status="IN_PROGRESS",
+        note="Treatment started",
+        actor_id=test_dentist.id,
+        actor_role="DENTIST",
+    )
+    appointment = await appointment_service.transition_status(
+        appointment_id=appointment.id,
+        to_status="COMPLETED",
+        note="Treatment completed",
+        actor_id=test_dentist.id,
+        actor_role="DENTIST",
+    )
+    assert appointment.status == "COMPLETED"
+
+    # Try to transition from COMPLETED - should fail
+    with pytest.raises(InvalidStateTransitionError) as exc_info:
+        await appointment_service.transition_status(
+            appointment_id=appointment.id,
+            to_status="CANCELLED",
+            note="Trying to cancel",
+            actor_id=test_receptionist.id,
+            actor_role="RECEPTIONIST",
+        )
+    assert "terminal state" in str(exc_info.value).lower()
+
+    # Also test CANCELLED terminal state
+    # Use a different time slot to avoid overlap
+    from datetime import timedelta
+
+    target_date2 = appointment.start_time + timedelta(hours=2)
+    appointment2 = await appointment_service.book_appointment(
+        patient_id=appointment.patient_id,
+        dentist_id=appointment.dentist_id,
+        service_id=appointment.service_id,
+        start_time=target_date2,
+    )
+    appointment2 = await appointment_service.transition_status(
+        appointment_id=appointment2.id,
+        to_status="CONFIRMED",
+        note="Confirmed",
+        actor_id=test_receptionist.id,
+        actor_role="RECEPTIONIST",
+    )
+    appointment2 = await appointment_service.cancel_appointment(
+        appointment_id=appointment2.id,
+        cancellation_reason="Patient cancelled",
+        actor_id=test_receptionist.id,
+    )
+    assert appointment2.status == "CANCELLED"
+
+    # Try to transition from CANCELLED - should fail
+    with pytest.raises(InvalidStateTransitionError) as exc_info:
+        await appointment_service.transition_status(
+            appointment_id=appointment2.id,
+            to_status="CONFIRMED",
+            note="Trying to confirm",
+            actor_id=test_receptionist.id,
+            actor_role="RECEPTIONIST",
+        )
+    assert "terminal state" in str(exc_info.value).lower()
+
+
+async def test_fsm_invalid_transition_rejected(
+    appointment_service: AppointmentService,
+    booked_appointment,
+    test_receptionist: Staff,
+) -> None:
+    """Test: Invalid transitions (e.g., SCHEDULED -> COMPLETED) are rejected."""
+    from app.exceptions import InvalidStateTransitionError
+
+    appointment = booked_appointment
+
+    # Try to skip states: SCHEDULED -> COMPLETED (invalid)
+    with pytest.raises(InvalidStateTransitionError) as exc_info:
+        await appointment_service.transition_status(
+            appointment_id=appointment.id,
+            to_status="COMPLETED",
+            note="Trying to complete",
+            actor_id=test_receptionist.id,
+            actor_role="RECEPTIONIST",
+        )
+    assert "invalid transition" in str(exc_info.value).lower()
+
+
+async def test_fsm_dentist_only_transitions(
+    appointment_service: AppointmentService,
+    booked_appointment,
+    test_dentist: Staff,
+    test_receptionist: Staff,
+) -> None:
+    """Test 3: Only dentists can transition to IN_PROGRESS and COMPLETED."""
+    from app.exceptions import InvalidStateTransitionError
+
+    appointment = booked_appointment
+
+    # Move to CHECKED_IN first (receptionist can do this)
+    appointment = await appointment_service.transition_status(
+        appointment_id=appointment.id,
+        to_status="CONFIRMED",
+        note="Confirmed",
+        actor_id=test_receptionist.id,
+        actor_role="RECEPTIONIST",
+    )
+    appointment = await appointment_service.transition_status(
+        appointment_id=appointment.id,
+        to_status="CHECKED_IN",
+        note="Checked in",
+        actor_id=test_receptionist.id,
+        actor_role="RECEPTIONIST",
+    )
+
+    # Receptionist tries IN_PROGRESS - should fail (dentist only)
+    with pytest.raises(InvalidStateTransitionError) as exc_info:
+        await appointment_service.transition_status(
+            appointment_id=appointment.id,
+            to_status="IN_PROGRESS",
+            note="Starting treatment",
+            actor_id=test_receptionist.id,
+            actor_role="RECEPTIONIST",
+        )
+    assert "only dentists can transition" in str(exc_info.value).lower()
+
+    # Move to IN_PROGRESS using dentist
+    appointment = await appointment_service.transition_status(
+        appointment_id=appointment.id,
+        to_status="IN_PROGRESS",
+        note="Treatment started",
+        actor_id=test_dentist.id,
+        actor_role="DENTIST",
+    )
+
+    # Receptionist tries COMPLETED - should fail (dentist only)
+    with pytest.raises(InvalidStateTransitionError) as exc_info:
+        await appointment_service.transition_status(
+            appointment_id=appointment.id,
+            to_status="COMPLETED",
+            note="Completing treatment",
+            actor_id=test_receptionist.id,
+            actor_role="RECEPTIONIST",
+        )
+    assert "only dentists can transition" in str(exc_info.value).lower()

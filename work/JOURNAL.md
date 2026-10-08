@@ -74,7 +74,7 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-07 04:52 | build | - | T-007: Fixed review round 3 issues - N+1 roundtrip optimization (batch get_staff_by_ids, get_available_slots_with_data), SLOT_STEP rationale documented, test line length fixed. AC1 blocker documented as T-008 dependency. |
 | 2026-10-07 04:53 | - | T-007 | status -> in-review |
 | 2026-10-07 07:51 | - | T-007 | status -> changes-requested |
-| 2026-10-07 07:52 | - | T-007 | review round 4: changes requested, 1B/0M/1m/0n — AC1 blocker (architectural dependency on T-008), N+1 roundtrips resolved, SLOT_STEP minor primitive obsession |
+| 2026-10-07 07:52 | - | T-007 | review round 4: changes requested, 1B/0M/1m/0n ï¿½ AC1 blocker (architectural dependency on T-008), N+1 roundtrips resolved, SLOT_STEP minor primitive obsession |
 | 2026-10-07 08:03 | - | T-007 | status -> done |
 | 2026-10-07 08:05 | - | T-008 | status -> in-progress |
 | 2026-10-07 08:56 | - | T-008 | status -> in-review |
@@ -83,6 +83,13 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-07 11:14 | - | T-008 | status -> changes-requested |
 | 2026-10-07 11:16 | - | T-008 | review round 1: changes-requested, 1 blocker, 1 major, 3 minor, 3 nit |
 
-## 2026-10-07 11:21 — T-008 review round 2: changes-requested (1B/2M/2m)
+## 2026-10-07 11:21 ï¿½ T-008 review round 2: changes-requested (1B/2M/2m)
 No fix commit found between round 1 and round 2. All round-1 findings remain unaddressed. Blocker: missing with_for_update() in check_appointment_overlap (repository.py:868). This is the second consecutive changes-requested verdict. Implementer must address before next review.
 | 2026-10-07 12:14 | - | T-009 | status -> in-progress |
+| 2026-10-07 12:51 | - | T-009 | status -> in-review |
+| 2026-10-07 12:55 | review | T-009 | T-009 round 1: approve, 0B/0M/1m/1n â€” all ACs satisfied, gates green, tests meaningful. Minor: generic update_appointment; Nit: missing AppointmentDetailRead docstring. Report: work/reviews/T-009-review-1.md |
+| 2026-10-07 12:55 | - | T-009 | status -> done |
+| 2026-10-07 14:10 | - | T-010 | status -> in-review |
+| 2026-10-08 08:43 | - | T-010 | review round 1: changes-requested, B1 M2 m4 n1 |
+| 2026-10-08 08:44 | - | T-010 | status -> changes-requested |
+| 2026-10-08 08:51 | - | T-010 | status -> in-progress |

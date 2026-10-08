@@ -438,3 +438,36 @@ class AppointmentDetailRead(AppointmentRead):
     patient: PatientRead
     dentist: StaffRead
     service: ServiceRead
+
+
+class AppointmentStatusUpdate(BaseModel):
+    """FSM transition input — Spec 05 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    to_status: AppointmentStatus = Field(alias="toStatus")
+    note: str | None = None
+
+
+class AuditLogRead(BaseModel):
+    """Immutable audit log record with actor details — Spec 05 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True, from_attributes=True)
+
+    id: UUID
+    appointment_id: UUID = Field(alias="appointmentId")
+    actor_id: UUID = Field(alias="actorId")
+    from_status: str | None = Field(default=None, alias="fromStatus")
+    to_status: str | None = Field(default=None, alias="toStatus")
+    old_start_time: datetime | None = Field(default=None, alias="oldStartTime")
+    new_start_time: datetime | None = Field(default=None, alias="newStartTime")
+    note: str | None = None
+    created_at: datetime = Field(alias="createdAt")
+
+    actor: StaffRead
+
+    @computed_field(alias="actorName")  # type: ignore[prop-decorator]
+    @property
+    def actor_name(self) -> str:
+        """Get actor name from bound actor relationship."""
+        return self.actor.full_name if self.actor is not None else ""

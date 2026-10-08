@@ -21,6 +21,8 @@ from app.schemas import (
     AppointmentCreate,
     AppointmentDetailRead,
     AppointmentReschedule,
+    AppointmentStatusUpdate,
+    AuditLogRead,
 )
 
 router = APIRouter(prefix="/api/v1/appointments", tags=["appointments"])
@@ -50,7 +52,6 @@ def _appointment_detail_read(appointment: Appointment) -> AppointmentDetailRead:
 async def create_appointment_endpoint(
     request: AppointmentCreate,
     service: AppointmentServiceDep,
-    current_user: CurrentUserDep,
 ) -> AppointmentDetailRead:
     """Book a new appointment (Admin, Receptionist) (R-10, Spec 05 §4).
 
@@ -68,7 +69,6 @@ async def create_appointment_endpoint(
         dentist_id=request.dentist_id,
         service_id=request.service_id,
         start_time=request.start_time,
-        current_user_role=current_user.role,
     )
     # Fetch full detail with eager-loaded relations
     detail = await service.get_appointment_detail(appointment.id)
@@ -163,7 +163,7 @@ async def reschedule_appointment_endpoint(
         appointment_id=appointment_id,
         new_start_time=request.start_time,
         new_dentist_id=request.dentist_id,
-        current_user_role=current_user.role,
+        actor_id=current_user.id,
     )
     # Fetch full detail with eager-loaded relations
     detail = await service.get_appointment_detail(appointment.id)
@@ -201,8 +201,79 @@ async def cancel_appointment_endpoint(
     appointment = await service.cancel_appointment(
         appointment_id=appointment_id,
         cancellation_reason=request.cancellation_reason,
-        current_user_role=current_user.role,
+        actor_id=current_user.id,
     )
     # Fetch full detail with eager-loaded relations
     detail = await service.get_appointment_detail(appointment.id)
     return _appointment_detail_read(detail)
+
+
+# ---------------------------------------------------------------------------
+# Status Transition (Admin, Receptionist, Dentist)
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{appointment_id}/status",
+    response_model=AppointmentDetailRead,
+    dependencies=[Depends(require_roles("ADMIN", "RECEPTIONIST", "DENTIST"))],
+)
+async def update_appointment_status_endpoint(
+    appointment_id: UUID,
+    request: AppointmentStatusUpdate,
+    service: AppointmentServiceDep,
+    current_user: CurrentUserDep,
+) -> AppointmentDetailRead:
+    """Transition appointment status per FSM (Admin, Receptionist, Dentist)
+    (R-12, Spec 05 §4).
+
+    Path parameters:
+    - appointment_id: UUID of the appointment to transition
+
+    Request body:
+    - toStatus: Target status (CONFIRMED, CHECKED_IN, IN_PROGRESS, COMPLETED, NO_SHOW)
+    - note: Optional note for the transition
+
+    Returns 200 with the updated appointment including
+    patient, dentist, and service details.
+
+    Errors:
+    - 400 INVALID_STATUS_TRANSITION: Terminal state or invalid FSM transition
+    - 403: Dentist-only transitions (IN_PROGRESS, COMPLETED) attempted by non-dentist
+    """
+    appointment = await service.transition_status(
+        appointment_id=appointment_id,
+        to_status=request.to_status,
+        note=request.note,
+        actor_id=current_user.id,
+        actor_role=current_user.role,
+    )
+    # Fetch full detail with eager-loaded relations
+    detail = await service.get_appointment_detail(appointment.id)
+    return _appointment_detail_read(detail)
+
+
+# ---------------------------------------------------------------------------
+# Audit Logs (All staff)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/{appointment_id}/audit-logs",
+    response_model=list[AuditLogRead],
+    dependencies=[Depends(get_current_user)],
+)
+async def get_audit_logs_endpoint(
+    appointment_id: UUID,
+    service: AppointmentServiceDep,
+) -> list[AuditLogRead]:
+    """Get chronological audit log history for an appointment (All staff)
+    (R-14, Spec 05 §4).
+
+    Path parameters:
+    - appointment_id: UUID of the appointment
+
+    Returns list of audit log entries with actor details, ordered by created_at.
+    """
+    audit_logs = await service.get_audit_logs(appointment_id)
+    return [AuditLogRead.model_validate(log) for log in audit_logs]

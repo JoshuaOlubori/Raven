@@ -19,6 +19,7 @@ from app.models.patient import Patient
 from app.models.schedule import Staff
 
 if TYPE_CHECKING:
+    from app.models.audit import AppointmentAuditLog
     from app.models.service import DentalService
 
 
@@ -61,3 +62,6 @@ class Appointment(Base, UUIDMixin, TimestampMixin):
     patient: Mapped[Patient] = relationship(back_populates="appointments")
     dentist: Mapped[Staff] = relationship(back_populates="appointments")
     service: Mapped[DentalService] = relationship(back_populates="appointments")
+    audit_logs: Mapped[list[AppointmentAuditLog]] = relationship(
+        back_populates="appointment", cascade="all, delete-orphan"
+    )
