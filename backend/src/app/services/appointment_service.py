@@ -101,6 +101,8 @@ class AppointmentService:
             raise ServiceNotFoundError()
 
         # Convert incoming timezone-aware datetime to UTC for storage
+        # All audit datetime fields (created_at, old_start_time, new_start_time)
+        # are timezone-aware (UTC) per NFR-3 for PostgreSQL consistency.
         if start_time.tzinfo is not None:
             start_time = start_time.astimezone(ZoneInfo("UTC"))  # keep tz-aware (UTC)
 
@@ -354,8 +356,8 @@ class AppointmentService:
         Converts start/end to clinic timezone to find the weekday and
         checks against recurring weekly shifts.
 
-        Precondition: start_time and end_time are naive UTC datetimes
-        (normalised by book_appointment before this helper is called).
+        Precondition: start_time and end_time are timezone-aware UTC datetimes
+        (normalised by book_appointment / reschedule before this helper is called).
         """
         # Attach UTC info for astimezone() conversion to clinic timezone
         start_utc = start_time.replace(tzinfo=ZoneInfo("UTC"))
@@ -395,8 +397,8 @@ class AppointmentService:
     ) -> None:
         """Validate no time-off block overlaps the requested window.
 
-        Precondition: start_time and end_time are naive UTC datetimes
-        (normalised by book_appointment before this helper is called).
+        Precondition: start_time and end_time are timezone-aware UTC datetimes
+        (normalised by book_appointment / reschedule before this helper is called).
         Time-off blocks are stored in naive UTC, so the comparison is direct.
         """
         blocks = await list_time_off_blocks(

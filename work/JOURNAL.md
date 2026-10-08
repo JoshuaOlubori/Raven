@@ -95,3 +95,5 @@ No fix commit found between round 1 and round 2. All round-1 findings remain una
 | 2026-10-08 08:51 | - | T-010 | status -> in-progress |
 | 2026-10-08 08:57 | - | T-010 | status -> in-review |
 | 2026-10-08 08:57 | build | - | Addressed T-010 review round 1: actor binding (B1), immutability test (M2), actorName assertion (M), deprecated utcnow (m). All 121 tests pass, gates green. Ready for sdd-ticket-review. |
+| 2026-10-08 12:01 | - | T-010 | review round 2: changes-requested, B1/M2/m5 counts |
+| 2026-10-08 12:24 | - | T-010 | status -> in-progress |

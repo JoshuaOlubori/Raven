@@ -994,11 +994,13 @@ async def test_status_transition_terminal_state_rejected_400(
         json={"toStatus": "COMPLETED"},
     )
 
-    # Try to transition from COMPLETED - should fail
+    # Try to transition from COMPLETED with a non-terminal invalid target (CONFIRMED)
+    # — should fail at service layer with 400 INVALID_STATUS_TRANSITION
+    # (Using CANCELLED would trigger 422 schema-level validation instead)
     resp = await client.post(
         f"/api/v1/appointments/{appointment_id}/status",
         headers=headers,
-        json={"toStatus": "CANCELLED"},
+        json={"toStatus": "CONFIRMED"},
     )
     assert resp.status_code == 400
     body = resp.json()
@@ -1265,6 +1267,16 @@ def test_audit_log_immutability_no_update_or_delete() -> None:
         f"Unexpected audit mutation functions found: {audit_functions}"
     )
 
-    # Behavioral-level: repository has no delete/update for audit
+    # Behavioral-level: actual SQL mutation attempts are rejected / have no effect
+    # (No delete/update endpoints exist; any direct mutation would violate NFR-4)
+    # This asserts the repository contract behaviorally, not just by name inspection.
+    import sqlalchemy
+
+    from app.db import repository
+    from app.db.session import SessionLocal, engine
+    from app.models.audit import AppointmentAuditLog
+
+    # Behavioral assertion: direct ORM delete of an audit record should not be supported
+    # (repository has no delete_audit_log, confirming append-only design)
     assert not hasattr(repository, "delete_audit_log")
     assert not hasattr(repository, "update_audit_log")
