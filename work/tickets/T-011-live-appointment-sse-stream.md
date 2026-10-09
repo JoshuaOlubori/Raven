@@ -1,7 +1,7 @@
 ---
 id: T-011
 title: Real-time live appointment SSE stream
-status: changes-requested
+status: in-progress
 mode: AFK
 blocked_by: T-010
 spec_refs: specs/06-notifications-events.md#2-layer-1, specs/06-notifications-events.md#4-layer-3, specs/06-notifications-events.md#5-layer-4
@@ -13,7 +13,7 @@ updated: 2026-10-09
 Front-desk and operatory screens can subscribe to a live Server-Sent Events (SSE) stream (`GET /api/v1/appointments/live`) to receive instant appointment updates (booked, rescheduled, cancelled, checked in, started, completed) with periodic 15-second keep-alive heartbeats.
 
 ## What to build
-- `src/app/services/event_broadcaster.py`: `EventBroadcaster` singleton pub-sub managing active subscriber queues (`asyncio.Queue`), protected by `threading.Lock` for subscriber registration and deregistration (Standard §7).
+- `src/app/services/event_broadcaster.py`: app-scoped broadcaster using Redis Pub/Sub for cross-worker delivery and bounded per-worker subscriber queues for local SSE clients.
 - `src/app/routers/live.py`:
   - `GET /api/v1/appointments/live` using `response_class=EventSourceResponse`, yielding `ServerSentEvent` instances and keep-alive ping comments (`: ping`).
 - `src/app/services/appointment_service.py`: Wire event publication into booking, rescheduling, status transition, and cancellation flows.
@@ -21,7 +21,7 @@ Front-desk and operatory screens can subscribe to a live Server-Sent Events (SSE
 ## Acceptance criteria
 - [ ] Given an active SSE connection, When an appointment is booked, rescheduled, cancelled, or transitions status, Then an SSE event is delivered immediately to the client with `event_type` and full payload (R-15).
 - [ ] Given an idle SSE connection, When 15 seconds elapse without an appointment event, Then a keep-alive comment (`: ping`) is emitted to prevent connection dropouts (R-15).
-- [ ] Given multiple concurrent subscriber connections, When an event occurs, Then all active connections receive the event without deadlock or data race (Standard §7).
+- [ ] Given multiple concurrent subscriber connections across different Uvicorn workers, When an event occurs, Then all active connections receive the event without deadlock or data race (Standard §7, NFR-5).
 - [ ] When a client disconnects, Then the subscriber queue is cleanly unsubscribed and garbage collected.
 
 ## Test plan
@@ -37,7 +37,13 @@ Front-desk and operatory screens can subscribe to a live Server-Sent Events (SSE
 External push notifications or SMS/Email reminders (handled in T-012).
 
 ## Notes for the implementer
-Follow the standard's §6 streaming reference: use `EventSourceResponse` and `ServerSentEvent(data=..., event=..., id=...)`. Close or isolate the DB session before streaming to avoid holding open connections.
+Follow the standard's §6 streaming reference: use `EventSourceResponse` and `ServerSentEvent(data=..., event=..., id=...)`. Close or isolate the DB session before streaming to avoid holding open connections. Multi-worker delivery is required: use Redis Pub/Sub and `REDIS_URL`; do not treat the in-memory singleton as the cross-worker transport. Use bounded subscriber queues with an explicit slow-consumer/resync policy. Publish only after transaction commit. SSE integration tests must use a streaming-capable transport, not HTTPX's buffering `ASGITransport` for the infinite stream.
+
+## Implementation decision (2026-10-09)
+- **Multi-worker production support:** required. Redis Pub/Sub is the shared transport; one listener per worker fans messages into that worker's local SSE queues. Redis Pub/Sub is non-durable; reconnect/resync is the recovery strategy and durable replay is out of scope.
+- **Configuration:** `REDIS_URL` is required for production startup. Unit tests may inject an in-memory broadcaster; integration tests use a test Redis instance.
+- **Transaction safety:** event publishing happens after successful DB commit; failed commits must not emit events.
+- **Streaming resource safety:** auth DB session must close before the SSE body starts; each subscriber queue is bounded.
 
 ## Implementation log
 
@@ -68,6 +74,8 @@ Follow the standard's §6 streaming reference: use `EventSourceResponse` and `Se
 - `uv run pytest -q` ✅ (121 tests passed)
 
 ## Review history
+
+- **Round 2 decision** (2026-10-09): owner chose multi-worker production support. Implementation resumed on branch `implement/T-011-redis-multiworker`; see ADR 0003.
 
 - **Round 1** (2026-10-09): changes-requested — B2/M4/m3/n1 — [work/reviews/T-011-review-1.md](work/reviews/T-011-review-1.md)
 
