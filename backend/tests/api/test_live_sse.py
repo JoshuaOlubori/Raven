@@ -1,19 +1,24 @@
-"""SSE live appointment stream API tests (T-011 Test Plan #1, #2).
+"""SSE generator and API tests for T-011.
 
-Tests the GET /api/v1/appointments/live endpoint via streaming seam.
+Infinite SSE generators are tested directly: HTTPX ASGITransport buffers an
+ASGI response until completion and therefore cannot test an infinite stream.
 """
 
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 import pytest
+from fastapi.sse import ServerSentEvent
 from httpx import AsyncClient
+from starlette.requests import Request
 
+from app.api.auth import CurrentUser
 from app.models import DentalService, Patient, Staff, WorkingShift
+from app.routers import live as live_router
 from app.services.event_broadcaster import (
     get_event_broadcaster,
     reset_event_broadcaster,
@@ -28,9 +33,35 @@ def reset_broadcaster() -> None:
     reset_event_broadcaster()
 
 
-# ---------------------------------------------------------------------------
-# Test fixtures
-# ---------------------------------------------------------------------------
+def _request() -> Request:
+    """Build a minimal Starlette request for the public streaming seam."""
+    return Request(
+        {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/api/v1/appointments/live",
+            "raw_path": b"/api/v1/appointments/live",
+            "query_string": b"",
+            "headers": [],
+            "client": ("testclient", 123),
+            "server": ("testserver", 80),
+            "state": {"correlation_id": "test-sse"},
+        }
+    )
+
+
+def _current_user() -> CurrentUser:
+    return CurrentUser(
+        id=uuid4(),
+        email="receptionist@example.com",
+        full_name="SSE Receptionist",
+        role="RECEPTIONIST",
+        is_active=True,
+        created_at=datetime.now(UTC),
+    )
 
 
 @pytest.fixture
@@ -48,14 +79,14 @@ async def sse_test_dentist(test_session_local, override_dbsession) -> Staff:
         )
         session.add(dentist)
         await session.flush()
-
-        shift = WorkingShift(
-            dentist_id=dentist.id,
-            day_of_week=0,  # Monday
-            start_time=time(9, 0),
-            end_time=time(12, 0),
+        session.add(
+            WorkingShift(
+                dentist_id=dentist.id,
+                day_of_week=0,
+                start_time=time(9, 0),
+                end_time=time(12, 0),
+            )
         )
-        session.add(shift)
         await session.commit()
         await session.refresh(dentist)
         return dentist
@@ -72,7 +103,7 @@ async def sse_test_patient(test_session_local, override_dbsession) -> Patient:
             last_name="Doe",
             date_of_birth=date(1990, 1, 1),
             phone="+15551234567",
-            email="jane.doe@example.com",
+            email=f"jane-{uuid4().hex[:8]}@example.com",
             is_active=True,
         )
         session.add(patient)
@@ -118,9 +149,27 @@ async def sse_receptionist_headers(
         return auth_headers(staff.id, staff.role)
 
 
-# ---------------------------------------------------------------------------
-# Test 1: test_sse_stream_emits_appointment_event_on_transition
-# ---------------------------------------------------------------------------
+async def _create_appointment(
+    client: AsyncClient,
+    headers: dict[str, str],
+    dentist: Staff,
+    patient: Patient,
+    service: DentalService,
+) -> UUID:
+    """Create an appointment through the API and return its ID."""
+    start_time = datetime(2026, 1, 5, 9, 0, tzinfo=ZoneInfo("America/New_York"))
+    response = await client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patientId": str(patient.id),
+            "dentistId": str(dentist.id),
+            "serviceId": str(service.id),
+            "startTime": start_time.isoformat(),
+        },
+    )
+    assert response.status_code == 201, response.text
+    return UUID(response.json()["id"])
 
 
 async def test_sse_stream_emits_appointment_event_on_transition(
@@ -130,115 +179,54 @@ async def test_sse_stream_emits_appointment_event_on_transition(
     sse_test_service: DentalService,
     client: AsyncClient,
 ) -> None:
-    """R-15: SSE stream emits appointment event when status transitions.
-
-    Given an active SSE connection,
-    When an appointment transitions to CHECKED_IN,
-    Then an SSE event is delivered with event_type == 'appointment.checked_in'.
-    """
-    clinic_tz = ZoneInfo("America/New_York")
-    start_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
-
-    # 1. Create an appointment via API
-    create_resp = await client.post(
-        "/api/v1/appointments",
-        headers=sse_receptionist_headers,
-        json={
-            "patientId": str(sse_test_patient.id),
-            "dentistId": str(sse_test_dentist.id),
-            "serviceId": str(sse_test_service.id),
-            "startTime": start_time,
-        },
+    """An authenticated stream yields the expected event and payload."""
+    appointment_id = await _create_appointment(
+        client,
+        sse_receptionist_headers,
+        sse_test_dentist,
+        sse_test_patient,
+        sse_test_service,
     )
-    assert create_resp.status_code == 201
-    appointment = create_resp.json()
-    appointment_id = UUID(appointment["id"])
-
-    # 2. Start SSE stream in background
     broadcaster = get_event_broadcaster()
-    queue = await broadcaster.subscribe()
-
-    # 3. Trigger status transition to CHECKED_IN
-    # Need to go through CONFIRMED first
-    await client.post(
-        f"/api/v1/appointments/{appointment_id}/status",
-        headers=sse_receptionist_headers,
-        json={"toStatus": "CONFIRMED", "note": "Patient confirmed"},
-    )
-    await client.post(
-        f"/api/v1/appointments/{appointment_id}/status",
-        headers=sse_receptionist_headers,
-        json={"toStatus": "CHECKED_IN", "note": "Patient checked in"},
+    stream = live_router.stream_live_appointments(
+        _request(), _current_user(), broadcaster
     )
 
-    # 4. Wait for CHECKED_IN event on the queue (may receive CONFIRMED first)
     try:
-        event_data = None
-        async with asyncio.timeout(5.0):
-            while True:
-                event_data = await queue.get()
-                if event_data.event_type == "appointment.checked_in":
-                    break
-    except TimeoutError:
-        pytest.fail("No SSE event received within 5 seconds after status transition")
-
-    # 5. Verify event structure
-    assert event_data.event_type == "appointment.checked_in"
-    assert event_data.appointment_id == appointment_id
-    assert event_data.dentist_id == sse_test_dentist.id
-    expected_name = f"{sse_test_patient.first_name} {sse_test_patient.last_name}"
-    assert event_data.patient_name == expected_name
-    assert event_data.status == "CHECKED_IN"
-
-    # 6. Cleanup
-    await broadcaster.unsubscribe(queue)
-
-
-# ---------------------------------------------------------------------------
-# Test 2: test_sse_stream_emits_keep_alive_ping_comment
-# ---------------------------------------------------------------------------
+        pending = asyncio.create_task(anext(stream))
+        await asyncio.sleep(0)
+        response = await client.post(
+            f"/api/v1/appointments/{appointment_id}/status",
+            headers=sse_receptionist_headers,
+            json={"toStatus": "CONFIRMED", "note": "Patient confirmed"},
+        )
+        assert response.status_code == 200, response.text
+        event = await asyncio.wait_for(pending, timeout=2.0)
+        assert isinstance(event, ServerSentEvent)
+        assert event.event == "appointment.confirmed"
+        assert event.id == str(appointment_id)
+        assert event.data["appointmentId"] == str(appointment_id)
+        assert event.data["dentistId"] == str(sse_test_dentist.id)
+        assert event.data["patientName"] == "Jane Doe"
+        assert event.data["status"] == "CONFIRMED"
+    finally:
+        await stream.aclose()
 
 
 async def test_sse_stream_emits_keep_alive_ping_comment(
-    sse_receptionist_headers: dict[str, str],
-    client: AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """R-15: SSE stream emits keep-alive ping comment every 15 seconds.
-
-    Given an idle SSE connection,
-    When 15 seconds elapse without an appointment event,
-    Then a keep-alive comment (': ping') is emitted.
-    """
-    # Connect to SSE endpoint
-    async with client.stream(
-        "GET",
-        "/api/v1/appointments/live",
-        headers=sse_receptionist_headers,
-    ) as response:
-        assert response.status_code == 200
-        assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
-
-        # Read lines until we get a ping comment
-        ping_received = False
-        lines_read = 0
-
-        async for line in response.aiter_lines():
-            lines_read += 1
-            if line.startswith(": ping"):
-                ping_received = True
-                break
-            # Safety: don't read forever
-            if lines_read > 500:
-                break
-
-        assert ping_received, (
-            "SSE stream did not emit a : ping comment after 15 seconds"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Additional: SSE endpoint authentication
-# ---------------------------------------------------------------------------
+    """An idle stream yields a ping comment at the configured heartbeat interval."""
+    monkeypatch.setattr(live_router, "HEARTBEAT_SECONDS", 0.001)
+    stream = live_router.stream_live_appointments(
+        _request(), _current_user(), get_event_broadcaster()
+    )
+    try:
+        event = await asyncio.wait_for(anext(stream), timeout=0.5)
+        assert isinstance(event, ServerSentEvent)
+        assert event.comment == "ping"
+    finally:
+        await stream.aclose()
 
 
 async def test_sse_endpoint_requires_authentication(client: AsyncClient) -> None:
@@ -254,102 +242,62 @@ async def test_sse_multiple_concurrent_connections(
     sse_test_service: DentalService,
     client: AsyncClient,
 ) -> None:
-    """Multiple concurrent SSE connections all receive events."""
-    clinic_tz = ZoneInfo("America/New_York")
-    start_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).isoformat()
-
-    # Create appointment
-    create_resp = await client.post(
-        "/api/v1/appointments",
-        headers=sse_receptionist_headers,
-        json={
-            "patientId": str(sse_test_patient.id),
-            "dentistId": str(sse_test_dentist.id),
-            "serviceId": str(sse_test_service.id),
-            "startTime": start_time,
-        },
+    """Every active local stream receives a published appointment event."""
+    appointment_id = await _create_appointment(
+        client,
+        sse_receptionist_headers,
+        sse_test_dentist,
+        sse_test_patient,
+        sse_test_service,
     )
-    assert create_resp.status_code == 201
-    appointment_id = UUID(create_resp.json()["id"])
-
-    # Create 3 SSE connections
-    connections = []
-    responses = []
-    for _ in range(3):
-        conn = client.stream(
-            "GET",
-            "/api/v1/appointments/live",
-            headers=sse_receptionist_headers,
-        )
-        response = await conn.__aenter__()
-        responses.append(response)
-        connections.append(conn)
-
-    # Wait for connections to be fully established
-    await asyncio.sleep(0.2)
-
-    async def wait_for_checked_in(response) -> bool:
-        """Wait for checked_in event on a single connection."""
-        async for line in response.aiter_lines():
-            if line.startswith("event: appointment.checked_in"):
-                return True
-        return False
+    broadcaster = get_event_broadcaster()
+    streams = [
+        live_router.stream_live_appointments(_request(), _current_user(), broadcaster)
+        for _ in range(3)
+    ]
+    pending = [asyncio.create_task(anext(stream)) for stream in streams]
 
     try:
-        # Trigger event
-        confirmed_resp = await client.post(
+        # Each generator subscribes before waiting for the next queue event.
+        await asyncio.sleep(0)
+        response = await client.post(
             f"/api/v1/appointments/{appointment_id}/status",
             headers=sse_receptionist_headers,
-            json={"toStatus": "CONFIRMED"},
+            json={"toStatus": "CONFIRMED", "note": "Fan-out test"},
         )
-        assert confirmed_resp.status_code == 200
-        checked_in_resp = await client.post(
-            f"/api/v1/appointments/{appointment_id}/status",
-            headers=sse_receptionist_headers,
-            json={"toStatus": "CHECKED_IN"},
+        assert response.status_code == 200, response.text
+        events = await asyncio.wait_for(
+            asyncio.gather(*pending),
+            timeout=2.0,
         )
-        assert checked_in_resp.status_code == 200
-
-        # Read from all connections concurrently
-        results = await asyncio.gather(*[wait_for_checked_in(r) for r in responses])
-        events_received = sum(results)
-        assert events_received == len(responses), (
-            f"Expected all {len(responses)} SSE subscribers to receive the event; "
-            f"only {events_received} did"
-        )
+        assert len(events) == 3
+        assert all(event.event == "appointment.confirmed" for event in events)
+        assert all(event.id == str(appointment_id) for event in events)
     finally:
-        for conn in connections:
-            await conn.__aexit__(None, None, None)
+        for task in pending:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        for stream in streams:
+            await stream.aclose()
 
 
-async def test_sse_disconnect_cleans_up_subscription(
-    sse_receptionist_headers: dict[str, str],
-    client: AsyncClient,
-) -> None:
-    """Client disconnect cleans up subscription (broadcaster count decreases)."""
+async def test_sse_disconnect_cleans_up_subscription() -> None:
+    """Cancelling a blocked stream unregisters its local queue."""
     broadcaster = get_event_broadcaster()
     initial_count = await broadcaster.subscriber_count
-
-    # Open SSE connection
-    conn = client.stream(
-        "GET",
-        "/api/v1/appointments/live",
-        headers=sse_receptionist_headers,
+    stream = live_router.stream_live_appointments(
+        _request(), _current_user(), broadcaster
     )
-    await conn.__aenter__()
+    pending = asyncio.create_task(anext(stream))
 
     try:
-        # Retry subscriber count with longer wait (endpoint may take time to register)
-        for _ in range(10):
-            await asyncio.sleep(0.2)
-            if await broadcaster.subscriber_count == initial_count + 1:
-                break
-        else:
-            pytest.fail("SSE endpoint did not register a subscriber within 2 seconds")
+        async with asyncio.timeout(1.0):
+            while await broadcaster.subscriber_count != initial_count + 1:
+                await asyncio.sleep(0)
     finally:
-        # Close connection
-        await conn.__aexit__(None, None, None)
+        pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
+        await stream.aclose()
 
-    # Wait a moment for cleanup
-    await asyncio.sleep(0.1)
     assert await broadcaster.subscriber_count == initial_count
