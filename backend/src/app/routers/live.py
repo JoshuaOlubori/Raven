@@ -11,10 +11,10 @@ import asyncio
 import logging
 from collections.abc import AsyncIterable
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 
-from app.api.auth import CurrentUserDep, get_current_user
+from app.api.auth import CurrentUserStreamDep
 from app.api.deps import EventBroadcasterDep
 
 router = APIRouter(prefix="/api/v1/appointments", tags=["appointments"])
@@ -26,11 +26,10 @@ HEARTBEAT_SECONDS = 15.0
 @router.get(
     "/live",
     response_class=EventSourceResponse,
-    dependencies=[Depends(get_current_user)],
 )
 async def stream_live_appointments(
     request: Request,
-    current_user: CurrentUserDep,
+    current_user: CurrentUserStreamDep,
     broadcaster: EventBroadcasterDep,
 ) -> AsyncIterable[ServerSentEvent]:
     """Stream live appointment updates via Server-Sent Events (R-15, Spec 06 §5).
