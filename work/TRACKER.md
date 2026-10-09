@@ -18,5 +18,5 @@ _Generated 2026-10-09 10:07 — 9/12 tickets done._
 | [T-008](tickets/T-008-appointment-booking-overlap-lock.md) | Appointment booking and atomic overlap guard | done | AFK | T-005, T-007 |
 | [T-009](tickets/T-009-appointment-reschedule-cancel.md) | Appointment reschedule and reasoned cancellation | done | AFK | T-008 |
 | [T-010](tickets/T-010-appointment-fsm-audit-log.md) | Appointment lifecycle FSM and immutable audit log | in-review | AFK | T-009 |
-| [T-011](tickets/T-011-live-appointment-sse-stream.md) | Real-time live appointment SSE stream | changes-requested | AFK | T-010 |
+| [T-011](tickets/T-011-live-appointment-sse-stream.md) | Real-time live appointment SSE stream | in-progress | AFK | T-010 |
 | [T-012](tickets/T-012-confirmations-reminder-dispatcher.md) | Booking confirmations and 24h reminder dispatcher | todo | AFK | T-010 |
