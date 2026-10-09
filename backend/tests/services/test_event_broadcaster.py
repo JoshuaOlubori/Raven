@@ -6,6 +6,7 @@ Tests the EventBroadcaster service directly with service-level fakes.
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import datetime
 from uuid import uuid4
 
@@ -237,7 +238,49 @@ class TestBroadcasterQueueFullHandling:
         with caplog.at_level("WARNING"):
             await broadcaster.publish(event)
 
-        assert "SSE subscriber queue full, dropping event" in caplog.text
+        assert "SSE slow consumer disconnected" in caplog.text
+        assert await queue.get() is None
 
         # Cleanup
         await broadcaster.unsubscribe(queue)
+
+
+
+@pytest.mark.skipif(
+    not os.getenv("TEST_REDIS_URL"),
+    reason="Set TEST_REDIS_URL to run the cross-worker Redis integration test",
+)
+class TestRedisCrossWorkerFanOut:
+    """Distinct broadcaster instances model subscribers on different workers."""
+
+    async def test_event_published_by_one_worker_reaches_another(self) -> None:
+        redis_url = os.environ["TEST_REDIS_URL"]
+        publisher_worker = EventBroadcaster()
+        subscriber_worker = EventBroadcaster()
+        queue = None
+
+        try:
+            await publisher_worker.start(redis_url)
+            await subscriber_worker.start(redis_url)
+            queue = await subscriber_worker.subscribe()
+            event = AppointmentLiveEvent(
+                eventType="appointment.checked_in",
+                appointmentId=uuid4(),
+                dentistId=uuid4(),
+                patientName="Jane Doe",
+                status="CHECKED_IN",
+                startTime=datetime.now().astimezone(),
+            )
+
+            await publisher_worker.publish(event)
+            received = await asyncio.wait_for(queue.get(), timeout=3.0)
+
+            assert received is not None
+            assert received.event_type == "appointment.checked_in"
+            assert received.appointment_id == event.appointment_id
+            assert received.patient_name == "Jane Doe"
+        finally:
+            if queue is not None:
+                await subscriber_worker.unsubscribe(queue)
+            await publisher_worker.stop()
+            await subscriber_worker.stop()
