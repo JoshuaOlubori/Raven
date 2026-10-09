@@ -23,6 +23,10 @@ Front-desk and operatory screens can subscribe to a live Server-Sent Events (SSE
 - [ ] Given an idle SSE connection, When 15 seconds elapse without an appointment event, Then a keep-alive comment (`: ping`) is emitted to prevent connection dropouts (R-15).
 - [ ] Given multiple concurrent subscriber connections across different Uvicorn workers, When an event occurs, Then all active connections receive the event without deadlock or data race (Standard §7, NFR-5).
 - [ ] When a client disconnects, Then the subscriber queue is cleanly unsubscribed and garbage collected.
+- [ ] Given publisher and SSE subscriber requests handled by different Uvicorn workers, When an appointment event is committed, Then Redis Pub/Sub delivers the event to the subscriber worker (NFR-5, ADR 0003).
+- [ ] When the appointment transaction fails to commit, Then no live event is published.
+- [ ] When a subscriber queue reaches its configured capacity, Then the connection receives an explicit resync-required signal and closes; memory usage remains bounded.
+- [ ] The SSE authentication database session is closed before the response begins streaming.
 
 ## Test plan
 | # | Test name | Seam | Asserts | Expected value comes from |
