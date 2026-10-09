@@ -33,6 +33,10 @@ class Settings(BaseSettings):
         default="development",
         validation_alias="APP_ENV",
     )
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        validation_alias="REDIS_URL",
+    )
 
 
 def get_settings() -> Settings:
