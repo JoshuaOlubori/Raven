@@ -231,8 +231,9 @@ async def test_sse_stream_emits_keep_alive_ping_comment(
             if lines_read > 500:
                 break
 
-        assert ping_received, "SSE stream did not emit a : ping comment after 15 seconds"
-
+        assert ping_received, (
+            "SSE stream did not emit a : ping comment after 15 seconds"
+        )
 
 
 # ---------------------------------------------------------------------------

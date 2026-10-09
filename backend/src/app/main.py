@@ -53,13 +53,15 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
 app = FastAPI(title="Dental Clinic Appointment Tracker", lifespan=lifespan)
 
 # Mount API routers
+# live_router must come before appointments_router to avoid route conflict:
+# appointments_router has GET /{appointment_id} which would catch /live
 app.include_router(auth_router)
 app.include_router(services_router)
 app.include_router(staff_router)
 app.include_router(patients_router)
 app.include_router(schedules_router)
-app.include_router(appointments_router)
 app.include_router(live_router)
+app.include_router(appointments_router)
 
 
 @app.middleware("http")

@@ -59,6 +59,7 @@ async def stream_live_appointments(
             try:
                 # Wait for next event with a 15-second timeout for keep-alive
                 event_data = await asyncio.wait_for(queue.get(), timeout=15.0)
+                logger.debug("SSE sending event: %s", event_data.event_type)
                 yield ServerSentEvent(
                     data=event_data.model_dump(by_alias=True, mode="json"),
                     event=event_data.event_type,
@@ -66,6 +67,7 @@ async def stream_live_appointments(
                 )
             except TimeoutError:
                 # Periodic keep-alive ping comment to prevent client/proxy timeouts
+                logger.info("SSE sending keep-alive ping")
                 yield ServerSentEvent(comment="ping")
     finally:
         await broadcaster.unsubscribe(queue)
