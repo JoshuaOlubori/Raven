@@ -20,6 +20,7 @@ from app.api.deps import EventBroadcasterDep
 router = APIRouter(prefix="/api/v1/appointments", tags=["appointments"])
 
 logger = logging.getLogger("app.live")
+HEARTBEAT_SECONDS = 15.0
 
 
 @router.get(
@@ -58,7 +59,7 @@ async def stream_live_appointments(
         while True:
             try:
                 # Wait for next event with a 15-second timeout for keep-alive
-                event_data = await asyncio.wait_for(queue.get(), timeout=15.0)
+                event_data = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_SECONDS)
                 if event_data is None:
                     logger.warning(
                         "SSE slow consumer requires resync: user_id=%s",
