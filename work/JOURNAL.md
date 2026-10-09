@@ -98,3 +98,9 @@ No fix commit found between round 1 and round 2. All round-1 findings remain una
 | 2026-10-08 12:01 | - | T-010 | review round 2: changes-requested, B1/M2/m5 counts |
 | 2026-10-08 12:24 | - | T-010 | status -> in-progress |
 | 2026-10-08 13:44 | - | T-010 | status -> in-review |
+| 2026-10-08 13:50 | - | T-010 | status -> done (tracker + git confirm; review round 3 approved) |
+| 2026-10-08 14:16 | - | T-011 | status -> in-progress |
+| 2026-10-09 08:30 | - | T-011 | status -> in-review |
+| 2026-10-09 08:48 | - | T-011 | status -> changes-requested |
+| 2026-10-09 08:49 | - | T-011 | review round 1: changes-requested, B2/M4/m3/n1 counts |
+| 2026-10-09 10:07 | - | T-011 | status -> in-review |

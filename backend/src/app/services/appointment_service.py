@@ -13,6 +13,8 @@ The service is stateless: it holds only a reference to the request-scoped
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from datetime import datetime, time, timedelta
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -46,15 +48,72 @@ from app.models import (
     Appointment,
     AppointmentAuditLog,
 )
+from app.schemas import AppointmentLiveEvent, EventType
+from app.services.event_broadcaster import EventBroadcaster, get_event_broadcaster
+from app.services.notification_service import (
+    NotificationService,
+    get_notification_service,
+)
 
 
 class AppointmentService:
     """Domain service for appointment operations (Spec 05 §3)."""
 
-    def __init__(self, session: AsyncSession, settings: Settings) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        settings: Settings,
+        broadcaster: EventBroadcaster | None = None,
+        notification_service: NotificationService | None = None,
+    ) -> None:
         self._session = session
         self._settings = settings
         self._clinic_tz = ZoneInfo(settings.clinic_timezone)
+        self._broadcaster = broadcaster or get_event_broadcaster()
+        self._notification_service = notification_service or get_notification_service()
+
+    def _publish_event(
+        self,
+        event_type: str,
+        appointment: Appointment,
+    ) -> None:
+        """Publish an appointment live event to the SSE broadcaster (Spec 06 §5).
+
+        Fire-and-forget: does not await the publish to avoid blocking the
+        request. The broadcaster handles backpressure internally.
+        Exceptions in the background task are logged with correlation ID.
+        """
+        event = AppointmentLiveEvent(
+            eventType=event_type,
+            appointmentId=appointment.id,
+            dentistId=appointment.dentist_id,
+            patientName=(
+                f"{appointment.patient.first_name} {appointment.patient.last_name}"
+            ),
+            status=appointment.status,
+            startTime=appointment.start_time,
+        )
+        # Schedule the publish as a background task (non-blocking)
+        # with error handling to surface exceptions
+        asyncio.create_task(self._broadcaster.publish(event)).add_done_callback(
+            self._log_task_exception
+        )
+
+    @staticmethod
+    def _log_task_exception(task: asyncio.Task) -> None:
+        """Log exceptions from fire-and-forget background tasks.
+
+        Args:
+            task: The completed task to check for exceptions.
+        """
+        if task.cancelled():
+            return
+        if task.exception() is not None:
+            logger = logging.getLogger("app.appointment_service")
+            logger.exception(
+                "Background task failed: task=%s",
+                task.get_name(),
+            )
 
     # -------------------------------------------------------------------------
     # Booking (Admin, Receptionist)
@@ -131,6 +190,17 @@ class AppointmentService:
             end_time=end_time,
             status="SCHEDULED",
         )
+
+        # 6. Publish appointment booked event
+        await self._session.refresh(
+            appointment, attribute_names=["patient", "dentist", "service"]
+        )
+        self._publish_event(EventType.APPOINTMENT_BOOKED, appointment)
+
+        # 7. Send booking confirmation (fire-and-forget, R-16)
+        asyncio.create_task(
+            self._notification_service.send_booking_confirmation(appointment)
+        ).add_done_callback(self._log_task_exception)
 
         return appointment
 
@@ -272,6 +342,17 @@ class AppointmentService:
             note="Appointment rescheduled",
         )
 
+        # 10. Publish appointment rescheduled event
+        await self._session.refresh(
+            appointment, attribute_names=["patient", "dentist", "service"]
+        )
+        self._publish_event(EventType.APPOINTMENT_RESCHEDULED, appointment)
+
+        # 11. Send reschedule confirmation (fire-and-forget, R-16)
+        asyncio.create_task(
+            self._notification_service.send_reschedule_confirmation(appointment)
+        ).add_done_callback(self._log_task_exception)
+
         return appointment
 
     # -------------------------------------------------------------------------
@@ -341,6 +422,12 @@ class AppointmentService:
             new_start_time=None,
             note=cancellation_reason.strip(),
         )
+
+        # 6. Publish appointment cancelled event
+        await self._session.refresh(
+            appointment, attribute_names=["patient", "dentist", "service"]
+        )
+        self._publish_event(EventType.APPOINTMENT_CANCELLED, appointment)
 
         return appointment
 
@@ -514,6 +601,21 @@ class AppointmentService:
             new_start_time=None,
             note=note,
         )
+
+        # 7. Publish appointment status transition event
+        event_type_map = {
+            "CONFIRMED": EventType.APPOINTMENT_CONFIRMED,
+            "CHECKED_IN": EventType.APPOINTMENT_CHECKED_IN,
+            "IN_PROGRESS": EventType.APPOINTMENT_STARTED,
+            "COMPLETED": EventType.APPOINTMENT_COMPLETED,
+            "NO_SHOW": EventType.APPOINTMENT_NO_SHOW,
+        }
+        event_type = event_type_map.get(to_status)
+        if event_type:
+            await self._session.refresh(
+                appointment, attribute_names=["patient", "dentist", "service"]
+            )
+            self._publish_event(event_type, appointment)
 
         return appointment
 

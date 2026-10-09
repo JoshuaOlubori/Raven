@@ -19,6 +19,14 @@ from app.db.session import SessionLocal
 from app.services.appointment_service import AppointmentService
 from app.services.auth_service import AuthService
 from app.services.availability_engine import AvailabilityEngine
+from app.services.event_broadcaster import (
+    EventBroadcaster,
+    get_event_broadcaster,
+)
+from app.services.notification_service import (
+    NotificationService,
+    get_notification_service,
+)
 from app.services.patient_service import PatientService
 from app.services.schedule_service import ScheduleService
 from app.services.service_catalog import ServiceCatalog
@@ -134,11 +142,46 @@ AvailabilityEngineDep = Annotated[AvailabilityEngine, Depends(get_availability_e
 def get_appointment_service(
     session: DbSessionDep,
     settings: SettingsDep,
+    broadcaster: EventBroadcasterDep,
+    notification_service: NotificationServiceDep,
 ) -> AppointmentService:
     """Construct an ``AppointmentService`` with the request-scoped
-    session and settings.
+    session, settings, event broadcaster, and notification service.
     """
-    return AppointmentService(session=session, settings=settings)
+    return AppointmentService(
+        session=session,
+        settings=settings,
+        broadcaster=broadcaster,
+        notification_service=notification_service,
+    )
 
 
 AppointmentServiceDep = Annotated[AppointmentService, Depends(get_appointment_service)]
+
+
+# ---------------------------------------------------------------------------
+# Event broadcaster dependency (Spec 06 §3 — Layer 3)
+# ---------------------------------------------------------------------------
+
+
+def get_event_broadcaster_dep() -> EventBroadcaster:
+    """Return the global ``EventBroadcaster`` singleton (Spec 06 §3, Standard §7)."""
+    return get_event_broadcaster()
+
+
+EventBroadcasterDep = Annotated[EventBroadcaster, Depends(get_event_broadcaster_dep)]
+
+
+# ---------------------------------------------------------------------------
+# Notification service dependency (Spec 06 §3 — Layer 3)
+# ---------------------------------------------------------------------------
+
+
+def get_notification_service_dep() -> NotificationService:
+    """Return the global ``NotificationService`` singleton (Spec 06 §3)."""
+    return get_notification_service()
+
+
+NotificationServiceDep = Annotated[
+    NotificationService, Depends(get_notification_service_dep)
+]

@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import date, datetime, time
 from typing import Annotated, Literal, Self
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from pydantic import (
     BaseModel,
@@ -61,6 +62,23 @@ ServiceDuration = Annotated[
         le=480,
         description="Duration in minutes (e.g. 15, 30, 45, 60, 90)",
     ),
+]
+
+
+def _ensure_utc(value: object) -> object:
+    """Ensure datetime is timezone-aware UTC."""
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            raise ValueError("datetime must be timezone-aware")
+        # Convert to UTC
+        return value.astimezone(ZoneInfo("UTC"))
+    return value
+
+
+UTCDateTime = Annotated[
+    datetime,
+    BeforeValidator(_ensure_utc),
+    Field(description="UTC timestamp"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -478,3 +496,42 @@ class AuditLogRead(BaseModel):
     def actor_name(self) -> str:
         """Get actor name from bound actor relationship."""
         return self.actor.full_name if self.actor is not None else ""
+
+
+# ---------------------------------------------------------------------------
+# Live SSE Event schemas (Spec 06 §2 — Layer 1)
+# ---------------------------------------------------------------------------
+
+
+class EventType:
+    """Event type constants for SSE stream (Spec 06 §2).
+
+    Using class with constants instead of Enum to keep schema simple
+    (event_type is a raw string in the spec). Centralizes strings to
+    prevent typos and enable static checking.
+    """
+
+    APPOINTMENT_BOOKED = "appointment.booked"
+    APPOINTMENT_RESCHEDULED = "appointment.rescheduled"
+    APPOINTMENT_CANCELLED = "appointment.cancelled"
+    APPOINTMENT_CONFIRMED = "appointment.confirmed"
+    APPOINTMENT_CHECKED_IN = "appointment.checked_in"
+    APPOINTMENT_STARTED = "appointment.started"
+    APPOINTMENT_COMPLETED = "appointment.completed"
+    APPOINTMENT_NO_SHOW = "appointment.no_show"
+
+
+class AppointmentLiveEvent(BaseModel):
+    """Live appointment event for SSE stream — Spec 06 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    event_type: str = Field(alias="eventType")
+    appointment_id: UUID = Field(alias="appointmentId")
+    dentist_id: UUID = Field(alias="dentistId")
+    patient_name: str = Field(alias="patientName")
+    status: str
+    start_time: datetime = Field(alias="startTime")
+    timestamp: UTCDateTime = Field(
+        default_factory=lambda: datetime.now(ZoneInfo("UTC"))
+    )

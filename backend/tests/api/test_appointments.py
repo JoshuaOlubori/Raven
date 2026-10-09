@@ -1281,7 +1281,8 @@ def test_audit_log_immutability_no_update_or_delete() -> None:
     # Behavioral mutation attempt: mutation should have no path (NFR-4)
     # (No mutation endpoint; mutation violates append-only design)
     mutation_methods = [
-        m for m in dir(repository)
+        m
+        for m in dir(repository)
         if callable(getattr(repository, m, None))
         and (m.startswith("update_") or m.startswith("delete_"))
         and "audit" in m.lower()
