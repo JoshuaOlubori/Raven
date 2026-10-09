@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from threading import Lock
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -89,33 +90,25 @@ class EventBroadcaster:
 
 # Global singleton instance
 _event_broadcaster: EventBroadcaster | None = None
-_broadcaster_lock = asyncio.Lock()
+_broadcaster_lock = Lock()
 
 
 def get_event_broadcaster() -> EventBroadcaster:
-    """Return the global EventBroadcaster singleton (async-safe initialization)."""
+    """Return the process-wide broadcaster, initializing it exactly once."""
     global _event_broadcaster
-    if _event_broadcaster is None:
-        # Note: This is not truly async-safe without a lock, but in practice
-        # initialization happens at startup before concurrent requests.
-        # For full safety, use the lifespan startup hook.
-        _event_broadcaster = EventBroadcaster()
-    return _event_broadcaster
+    with _broadcaster_lock:
+        if _event_broadcaster is None:
+            _event_broadcaster = EventBroadcaster()
+        return _event_broadcaster
 
 
 async def get_event_broadcaster_async() -> EventBroadcaster:
-    """Return the global EventBroadcaster singleton (async-safe initialization)."""
-    global _event_broadcaster
-    async with _broadcaster_lock:
-        if _event_broadcaster is None:
-            _event_broadcaster = EventBroadcaster()
-    return _event_broadcaster
+    """Async dependency-compatible accessor for the process-wide broadcaster."""
+    return get_event_broadcaster()
 
 
 def reset_event_broadcaster() -> None:
-    """Reset the global EventBroadcaster singleton (for testing).
-
-    Allows test isolation by clearing the module-level singleton state.
-    """
+    """Reset the singleton for isolated tests."""
     global _event_broadcaster
-    _event_broadcaster = None
+    with _broadcaster_lock:
+        _event_broadcaster = None

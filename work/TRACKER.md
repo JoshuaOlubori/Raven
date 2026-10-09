@@ -1,6 +1,10 @@
 # Tracker
 
-_Generated 2026-10-09 10:07 � 9/12 tickets done._
+## Active workflow
+
+- [Local PR review, validation, troubleshooting, and merge runbook](PR-REVIEW-WORKFLOW.md) — follow this runbook for PR #1 and future PRs. The local coding agent must inspect GitHub review/CI, fetch and test the branch locally, push fixes to the PR branch, and merge only when required checks and approvals permit.
+
+_Generated 2026-10-09 10:07 — 9/12 tickets done._
 
 | ID | Title | Status | Mode | Blocked by |
 |---|---|---|---|---|

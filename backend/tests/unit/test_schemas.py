@@ -16,6 +16,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas import (
+    AppointmentStatusUpdate,
     PatientCreate,
     ServiceCreate,
     TimeOffBlockCreate,
@@ -124,3 +125,23 @@ def test_time_off_block_start_after_end_rejected() -> None:
         end_time=base_time + timedelta(hours=1),
         reason="Lunch",
     )
+
+
+# ---------------------------------------------------------------------------
+# Appointment lifecycle schema tests (T-010, Spec 05 §2)
+# ---------------------------------------------------------------------------
+
+
+def test_cancelled_status_requires_dedicated_cancel_endpoint() -> None:
+    """T-010: CANCELLED cannot bypass the required cancellation-reason contract."""
+    with pytest.raises(
+        ValidationError,
+        match="CANCELLED requires the dedicated cancel endpoint",
+    ):
+        AppointmentStatusUpdate.model_validate(
+            {"toStatus": "CANCELLED", "note": "cancel"}
+        )
+
+    # Non-cancellation lifecycle targets remain valid request payloads.
+    request = AppointmentStatusUpdate.model_validate({"toStatus": "CONFIRMED"})
+    assert request.to_status == "CONFIRMED"
