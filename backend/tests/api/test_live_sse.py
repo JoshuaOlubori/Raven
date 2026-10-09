@@ -231,6 +231,8 @@ async def test_sse_stream_emits_keep_alive_ping_comment(
             if lines_read > 500:
                 break
 
+        assert ping_received, "SSE stream did not emit a : ping comment after 15 seconds"
+
 
 
 # ---------------------------------------------------------------------------
@@ -294,20 +296,26 @@ async def test_sse_multiple_concurrent_connections(
 
     try:
         # Trigger event
-        await client.post(
+        confirmed_resp = await client.post(
             f"/api/v1/appointments/{appointment_id}/status",
             headers=sse_receptionist_headers,
             json={"toStatus": "CONFIRMED"},
         )
-        await client.post(
+        assert confirmed_resp.status_code == 200
+        checked_in_resp = await client.post(
             f"/api/v1/appointments/{appointment_id}/status",
             headers=sse_receptionist_headers,
             json={"toStatus": "CHECKED_IN"},
         )
+        assert checked_in_resp.status_code == 200
 
         # Read from all connections concurrently
         results = await asyncio.gather(*[wait_for_checked_in(r) for r in responses])
         events_received = sum(results)
+        assert events_received == len(responses), (
+            f"Expected all {len(responses)} SSE subscribers to receive the event; "
+            f"only {events_received} did"
+        )
     finally:
         for conn in connections:
             await conn.__aexit__(None, None, None)
@@ -336,8 +344,7 @@ async def test_sse_disconnect_cleans_up_subscription(
             if await broadcaster.subscriber_count == initial_count + 1:
                 break
         else:
-            # If it never registers, skip this strict check (endpoint works; test isolation issue)
-            pass
+            pytest.fail("SSE endpoint did not register a subscriber within 2 seconds")
     finally:
         # Close connection
         await conn.__aexit__(None, None, None)
