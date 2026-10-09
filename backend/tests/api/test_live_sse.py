@@ -20,6 +20,7 @@ from app.api.auth import CurrentUser
 from app.models import DentalService, Patient, Staff, WorkingShift
 from app.routers import live as live_router
 from app.services.event_broadcaster import (
+    EventBroadcaster,
     get_event_broadcaster,
     reset_event_broadcaster,
 )
@@ -360,6 +361,47 @@ async def test_sse_stream_emits_booking_reschedule_and_cancellation_events(
         assert cancelled.data["status"] == "CANCELLED"
     finally:
         if pending is not None and not pending.done():
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
+        await stream.aclose()
+
+
+
+async def test_sse_slow_consumer_gets_resync_signal() -> None:
+    """A full queue terminates a slow stream with an explicit refetch signal."""
+    broadcaster = EventBroadcaster(queue_maxsize=1)
+    stream = live_router.stream_live_appointments(
+        _request(), _current_user(), broadcaster
+    )
+    pending = asyncio.create_task(anext(stream))
+
+    try:
+        async with asyncio.timeout(1.0):
+            while await broadcaster.subscriber_count != 1:
+                await asyncio.sleep(0)
+
+        from app.schemas import AppointmentLiveEvent
+
+        event = AppointmentLiveEvent(
+            eventType="appointment.booked",
+            appointmentId=uuid4(),
+            dentistId=uuid4(),
+            patientName="Jane Doe",
+            status="SCHEDULED",
+            startTime=datetime.now(UTC),
+        )
+        await broadcaster.publish(event)
+        delivered = await asyncio.wait_for(pending, timeout=1.0)
+        assert delivered.event == "appointment.booked"
+
+        # The generator is paused at yield; these fill and overflow its queue.
+        await broadcaster.publish(event)
+        await broadcaster.publish(event)
+        resync = await asyncio.wait_for(anext(stream), timeout=1.0)
+        assert resync.event == "appointment.resync_required"
+        assert resync.data == {"reason": "slow_consumer", "action": "refetch"}
+    finally:
+        if not pending.done():
             pending.cancel()
             await asyncio.gather(pending, return_exceptions=True)
         await stream.aclose()
