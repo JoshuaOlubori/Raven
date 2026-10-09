@@ -62,9 +62,7 @@ async def get_db_session() -> AsyncGenerator[AsyncSession]:
 
 # Function-scoped cleanup is important for streaming endpoints: DB sessions
 # must close before the response body starts streaming.
-DbSessionDep = Annotated[
-    AsyncSession, Depends(get_db_session, scope="function")
-]
+DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
 
 
 # ---------------------------------------------------------------------------
