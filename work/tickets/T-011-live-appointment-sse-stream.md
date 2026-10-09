@@ -94,7 +94,7 @@ Follow the standard's §6 streaming reference: use `EventSourceResponse` and `Se
 - Redis Pub/Sub transport with per-worker local fan-out and lifespan-managed connections.
 - `REDIS_URL` configuration and startup failure if the broker cannot initialize.
 - Bounded subscriber queues; slow clients receive `appointment.resync_required` and are closed.
-- Function-scoped DB dependency cleanup and post-commit event callbacks.
+- Short-lived SSE authentication session that closes before streaming and post-commit event callbacks.
 - Direct SSE generator tests that do not use HTTPX ASGITransport for infinite streams; optional cross-instance Redis integration test via `TEST_REDIS_URL`.
 - Spec and architecture decision updated; local setup documented in `backend/README.md`.
 
