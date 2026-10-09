@@ -104,3 +104,5 @@ No fix commit found between round 1 and round 2. All round-1 findings remain una
 | 2026-10-09 08:48 | - | T-011 | status -> changes-requested |
 | 2026-10-09 08:49 | - | T-011 | review round 1: changes-requested, B2/M4/m3/n1 counts |
 | 2026-10-09 10:07 | - | T-011 | status -> in-review |
+
+| 2026-10-09 10:30 | review | T-011 | Review round 2: changes-requested, 2 blockers / 4 major / 1 minor / 0 nit. Report: work/reviews/T-011-review-2.md. Quality gates not run; merge commit has no GitHub checks. |
