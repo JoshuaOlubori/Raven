@@ -16,6 +16,7 @@ from collections.abc import AsyncGenerator, Awaitable, Callable
 from fastapi import FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
+from app.config import get_settings
 from app.db.session import init_db
 from app.exceptions import DomainError
 from app.models.appointment import (  # noqa: F401 — register table on Base.metadata
@@ -39,15 +40,21 @@ from app.routers.patients import router as patients_router
 from app.routers.schedules import router as schedules_router
 from app.routers.services import router as services_router
 from app.routers.staff import router as staff_router
+from app.services.event_broadcaster import get_event_broadcaster
 
 logger = logging.getLogger("app")
 
 
 @contextlib.asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
-    """Initialize the database schema on startup; nothing to tear down."""
+    """Initialize shared resources and release them during application shutdown."""
     await init_db()
-    yield
+    broadcaster = get_event_broadcaster()
+    await broadcaster.start(get_settings().redis_url)
+    try:
+        yield
+    finally:
+        await broadcaster.stop()
 
 
 app = FastAPI(title="Dental Clinic Appointment Tracker", lifespan=lifespan)

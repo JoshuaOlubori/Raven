@@ -11,25 +11,25 @@ import asyncio
 import logging
 from collections.abc import AsyncIterable
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 
-from app.api.auth import CurrentUserDep, get_current_user
+from app.api.auth import CurrentUserStreamDep
 from app.api.deps import EventBroadcasterDep
 
 router = APIRouter(prefix="/api/v1/appointments", tags=["appointments"])
 
 logger = logging.getLogger("app.live")
+HEARTBEAT_SECONDS = 15.0
 
 
 @router.get(
     "/live",
     response_class=EventSourceResponse,
-    dependencies=[Depends(get_current_user)],
 )
 async def stream_live_appointments(
     request: Request,
-    current_user: CurrentUserDep,
+    current_user: CurrentUserStreamDep,
     broadcaster: EventBroadcasterDep,
 ) -> AsyncIterable[ServerSentEvent]:
     """Stream live appointment updates via Server-Sent Events (R-15, Spec 06 §5).
@@ -58,7 +58,19 @@ async def stream_live_appointments(
         while True:
             try:
                 # Wait for next event with a 15-second timeout for keep-alive
-                event_data = await asyncio.wait_for(queue.get(), timeout=15.0)
+                event_data = await asyncio.wait_for(
+                    queue.get(), timeout=HEARTBEAT_SECONDS
+                )
+                if event_data is None:
+                    logger.warning(
+                        "SSE slow consumer requires resync: user_id=%s",
+                        user_id,
+                    )
+                    yield ServerSentEvent(
+                        data={"reason": "slow_consumer", "action": "refetch"},
+                        event="appointment.resync_required",
+                    )
+                    return
                 logger.debug("SSE sending event: %s", event_data.event_type)
                 yield ServerSentEvent(
                     data=event_data.model_dump(by_alias=True, mode="json"),

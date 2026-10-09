@@ -17,7 +17,7 @@
 | **Repository + Real DB** | `pytest-asyncio`, SQLite (in-memory) / PostgreSQL | CRUD queries, unique constraints, foreign keys, cascade rules, eager loading (no N+1) |
 | **Service with Fakes** | `pytest` | Domain business logic with injected collaborator fakes (e.g. `FakeNotificationService`) |
 | **API via Dependency Graph** | `httpx.AsyncClient` + `app.dependency_overrides` | HTTP status codes, error bodies, role-based auth guards (`CurrentUserDep`), pagination |
-| **Streaming / SSE** | `httpx` async streaming | SSE event frames, keep-alive pings (`: ping`), event IDs, multi-subscriber broadcasts |
+| **Streaming / SSE** | Direct async-generator tests for infinite streams; real-server streaming client for wire-level integration | SSE event frames, keep-alive pings (`: ping`), event IDs, multi-subscriber broadcasts. Do not use HTTPX `ASGITransport` to consume an infinite response because it buffers until the ASGI app completes. |
 | **Concurrency Seam** | `asyncio.gather` / multi-session DB | Zero double-booking overlap guard (`409 Conflict`), simultaneous reminder claim idempotency |
 
 ---
@@ -46,7 +46,7 @@
 | **OpenAPI Contract Snapshot** | Verifies exported OpenAPI schema does not introduce unexpected breaking schema changes. | T-001 |
 | **Standardized Error Body Shape** | Asserts all error responses conform to `{ "error": "<code_string>", "message": "<str>", "correlation_id": "<str>" }`. | T-001 |
 | **Concurrency Overlap Guard** | Two concurrent sessions attempting to book overlapping slots for the same dentist; exactly 1 succeeds (201), 1 fails (409). | T-008 |
-| **Multi-Worker Safety** | Static AST / module inspection verifying no module-level mutable dicts/lists without locks. | T-011 |
+| **Multi-Worker Safety** | Redis Pub/Sub integration test with two independent broadcaster instances/workers; static inspection for process-local shared state. | T-011 |
 
 ---
 

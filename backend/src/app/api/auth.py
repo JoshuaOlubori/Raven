@@ -21,9 +21,12 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.api.deps import AuthServiceDep, DbSessionDep
+from app.config import get_settings
 from app.db.repository import get_staff_by_id
+from app.db.session import SessionLocal
 from app.exceptions import ForbiddenError
 from app.schemas import StaffRole
+from app.services.auth_service import AuthService
 
 security = HTTPBearer()
 
@@ -73,6 +76,44 @@ async def get_current_user(
 
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
+
+
+async def get_current_user_for_stream(
+    credentials: HTTPAuthorizationCredentials = Depends(security),  # noqa: B008
+) -> CurrentUser:
+    """Authenticate SSE clients with a short-lived session closed before streaming.
+
+    This owns a short-lived session instead of depending on the request-scoped
+    DB dependency, whose cleanup would otherwise wait for the infinite stream.
+    """
+    auth_service_settings = get_settings()
+    async with SessionLocal() as session:
+        auth_service = AuthService(session=session, settings=auth_service_settings)
+        try:
+            payload = auth_service.decode_token(credentials.credentials)
+        except pyjwt.PyJWTError:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid or expired token",
+            ) from None
+
+        staff = await get_staff_by_id(session, UUID(payload.staff_id))
+        if staff is None or not staff.is_active:
+            raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+        return CurrentUser(
+            id=staff.id,
+            email=staff.email,
+            full_name=staff.full_name,
+            role=cast(StaffRole, staff.role),
+            is_active=staff.is_active,
+            created_at=staff.created_at,
+        )
+
+
+CurrentUserStreamDep = Annotated[
+    CurrentUser, Depends(get_current_user_for_stream, scope="function")
+]
 
 
 # ---------------------------------------------------------------------------

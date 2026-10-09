@@ -93,11 +93,21 @@ class AppointmentService:
             status=appointment.status,
             startTime=appointment.start_time,
         )
-        # Schedule the publish as a background task (non-blocking)
-        # with error handling to surface exceptions
-        asyncio.create_task(self._broadcaster.publish(event)).add_done_callback(
-            self._log_task_exception
-        )
+
+        async def publish_after_commit() -> None:
+            """Publish only after the appointment transaction commits successfully."""
+            try:
+                await self._broadcaster.publish(event)
+            except Exception:
+                logging.getLogger("app.appointment_service").exception(
+                    "Appointment event publication failed after commit: "
+                    "event_type=%s appointment_id=%s",
+                    event.event_type,
+                    event.appointment_id,
+                )
+
+        callbacks = self._session.info.setdefault("after_commit_callbacks", [])
+        callbacks.append(publish_after_commit)
 
     @staticmethod
     def _log_task_exception(task: asyncio.Task) -> None:
@@ -110,9 +120,13 @@ class AppointmentService:
             return
         if task.exception() is not None:
             logger = logging.getLogger("app.appointment_service")
-            logger.exception(
-                "Background task failed: task=%s",
+            error = task.exception()
+            assert error is not None  # checked above
+            logger.error(
+                "Background task failed: task=%s error=%r",
                 task.get_name(),
+                error,
+                exc_info=(type(error), error, error.__traceback__),
             )
 
     # -------------------------------------------------------------------------
