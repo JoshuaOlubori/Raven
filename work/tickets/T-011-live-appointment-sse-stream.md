@@ -1,7 +1,7 @@
 ---
 id: T-011
 title: Real-time live appointment SSE stream
-status: in-progress
+status: changes-requested
 mode: AFK
 blocked_by: T-010
 spec_refs: specs/06-notifications-events.md#2-layer-1, specs/06-notifications-events.md#4-layer-3, specs/06-notifications-events.md#5-layer-4
@@ -52,68 +52,36 @@ Follow the standard's §6 streaming reference: use `EventSourceResponse` and `Se
 ## Implementation log
 
 **Files created:**
-- `backend/src/app/services/event_broadcaster.py` - Thread-safe `EventBroadcaster` singleton with `threading.Lock` for subscriber management
+- `backend/src/app/services/event_broadcaster.py` - Redis Pub/Sub transport with per-worker bounded queues
 - `backend/src/app/services/notification_service.py` - `NotificationService` protocol and `LoggingNotificationService` implementation
 - `backend/src/app/routers/live.py` - SSE endpoint `GET /api/v1/appointments/live` with 15-second keep-alive pings
 
 **Files modified:**
 - `backend/src/app/schemas.py` - Added `AppointmentLiveEvent` schema (Spec 06 §2)
 - `backend/src/app/services/__init__.py` - Exported new services
-- `backend/src/app/api/deps.py` - Added `EventBroadcasterDep` and `NotificationServiceDep` dependencies
-- `backend/src/app/services/appointment_service.py` - Added `_publish_event` method and event publishing after booking, rescheduling, cancellation, and status transitions
+- `backend/src/app/api/deps.py` - Added broadcaster and notification dependencies; post-commit callback dispatch
+- `backend/src/app/api/auth.py` - Added short-lived authentication dependency for SSE
+- `backend/src/app/services/appointment_service.py` - Added event publication after booking, rescheduling, cancellation, and status transitions
 - `backend/src/app/routers/__init__.py` - Exported `live_router`
-- `backend/src/app/main.py` - Mounted `live_router`
-
-**Decisions:**
-- Used `threading.Lock` for subscriber registry per Standard §7 (NFR-5)
-- Fire-and-forget event publishing via `asyncio.create_task` to avoid blocking request handlers
-- 15-second keep-alive timeout implemented with `asyncio.wait_for` and `TimeoutError` catch
-- Event types follow pattern: `appointment.booked`, `appointment.rescheduled`, `appointment.cancelled`, `appointment.confirmed`, `appointment.checked_in`, `appointment.started`, `appointment.completed`, `appointment.no_show`
-- Used camelCase aliases in `AppointmentLiveEvent` constructor to satisfy mypy with `populate_by_name=True`
-
-**Commands run (initial remote):**
-- `uv run ruff check` ✅
-- `uv run ruff format --check` ✅
-- `uv run mypy src` ✅
-- `uv run pytest -q` ✅ (121 tests passed)
-
-**Local validation (2026-10-09):**
-- `uv lock --directory backend` ✅ (added redis 8.1.0)
-- `uv run --directory backend ruff check` ✅
-- `uv run --directory backend ruff format --check src/` ✅
-- `uv run --directory backend mypy src` ✅
-- `uv run --directory backend pytest -q` ✅ (140 tests passed, 0 skipped)
-- Redis cross-worker integration test ✅ (TEST_REDIS_URL=redis://localhost:6379/0)
-
-**Fixes applied locally:**
-- Added missing `AuthService` import in `backend/src/app/api/auth.py`
-- Fixed import ordering in `backend/src/app/main.py`
-- Fixed line length in `backend/src/app/routers/live.py`
-- Fixed mypy error in `backend/src/app/services/appointment_service.py` (assert error is not None)
-- Fixed ruff issues in `backend/src/app/services/event_broadcaster.py` (contextlib.suppress, line lengths)
-- Fixed formatting in test files
-
-**Commit:** `d0c1379` — T-011: fix quality gates and add Redis integration test
-
-## Review history
-
-- **Round 2 decision** (2026-10-09): owner chose multi-worker production support. Implementation resumed on branch `implement/T-011-redis-multiworker`; see ADR 0003.
-
-- **Round 1** (2026-10-09): changes-requested — B2/M4/m3/n1 — [work/reviews/T-011-review-1.md](work/reviews/T-011-review-1.md)
-
-- **Round 2** (2026-10-09): changes-requested — B2/M4/m1/n0 — [work/reviews/T-011-review-2.md](work/reviews/T-011-review-2.md). Blockers: SSE tests use an in-process ASGI transport incompatible with an infinite stream; authenticated streaming retains a request-scoped DB session for the stream lifetime. Major: pre-commit event publishing, incomplete payload/operation assertions, no cross-worker fan-out, and unbounded subscriber queues. Quality gates not run in this review; GitHub merge commit has no check runs/status contexts.
-
-
-### Implementation log — resumed after round 2
-
-**Decision:** multi-worker production delivery is required. See [ADR 0003](../../docs/adr/0003-multi-worker-live-event-broker.md).
+- `backend/src/app/main.py` - Mounted `live_router` and manages Redis lifecycle
+- `backend/src/app/config.py` - Added `REDIS_URL` setting
+- `backend/uv.lock` - Includes Redis dependency
+- `docs/adr/0003-multi-worker-live-event-broker.md` and `work/specs/06-notifications-events.md` - Documented multi-worker decision
 
 **Implemented on branch `implement/T-011-redis-multiworker`:**
 - Redis Pub/Sub transport with per-worker local fan-out and lifespan-managed connections.
 - `REDIS_URL` configuration and startup failure if the broker cannot initialize.
 - Bounded subscriber queues; slow clients receive `appointment.resync_required` and are closed.
 - Short-lived SSE authentication session that closes before streaming and post-commit event callbacks.
-- Direct SSE generator tests that do not use HTTPX ASGITransport for infinite streams; optional cross-instance Redis integration test via `TEST_REDIS_URL`.
-- Spec and architecture decision updated; local setup documented in `backend/README.md`.
+- Direct SSE generator tests that avoid HTTPX ASGITransport for infinite streams, including heartbeat, disconnect cleanup, payload assertions, and slow-consumer resync.
+- Local setup documented in `backend/README.md`.
 
-**Not yet complete:** `backend/uv.lock` must be regenerated after adding the Redis dependency. Ruff, format, mypy, pytest and the Redis integration test have not been run in this remote editing environment. Do not mark T-011 done until the local quality gates pass and the integration test is exercised with Redis.
+**Review round 3 (2026-10-09): changes-requested — 0 blockers / 2 majors / 0 minors / 0 nits.** Report: [work/reviews/T-011-review-3.md](../reviews/T-011-review-3.md).
+- Major: required Redis cross-instance integration test is not present at the documented path; multi-worker delivery remains unverified by a committed test.
+- Major: Ruff, format, mypy, pytest, and Redis integration results have not been executed/verified in this remote review environment. Do not mark done until the test exists and all gates pass.
+
+## Review history
+- **Round 3** (2026-10-09): changes-requested — B0/M2/m0/n0 — [work/reviews/T-011-review-3.md](../reviews/T-011-review-3.md).
+- **Round 2 decision** (2026-10-09): owner chose multi-worker production support; see ADR 0003.
+- **Round 1** (2026-10-09): changes-requested — B2/M4/m3/n1 — [work/reviews/T-011-review-1.md](../reviews/T-011-review-1.md).
+- **Round 2** (2026-10-09): changes-requested — B2/M4/m1/n0 — [work/reviews/T-011-review-2.md](../reviews/T-011-review-2.md).
