@@ -70,7 +70,11 @@ async def mark_reminder_sent(session: AsyncSession, appointment_id: UUID, sent_a
 ## 4. Layer 3 — Wiring (Standard §5)
 
 ### Broadcaster & Notification Adapters
-- `EventBroadcaster`: Singleton pub-sub managing active client queues. Thread-safe subscription registry with `threading.Lock` (Standard §7).
+- `EventBroadcaster`: process-local subscriber queues fed by a process-shared Redis Pub/Sub channel. The local subscription registry is protected by an async lock; Redis provides cross-worker fan-out.
+- Redis connection URL is configured by `REDIS_URL`; production startup must fail clearly if the broker cannot be initialized. Tests may inject an in-memory broadcaster/fake broker.
+- Each worker maintains one Redis subscriber task and one publisher client for the lifetime of the FastAPI app. Shutdown cancels the listener and closes Redis resources.
+- Per-client queues are bounded (default 100 events). On saturation, the slow subscriber is disconnected or receives an explicit resync-required signal; events must not accumulate without bound.
+- Appointment events are published only after the database transaction commits successfully. No event is published if the transaction rolls back.
 - `NotificationService`: Protocol defining notification methods.
 - `LoggingNotificationService`: Default implementation logging dispatched messages to stdout / log file.
 - `get_event_broadcaster() -> EventBroadcaster`
@@ -125,6 +129,13 @@ await notification_service.send_booking_confirmation(appointment)
 ---
 
 ## 6. Layer 5 — State and Hardening (Standard §7, ADR 0002)
+
+### T-011 Multi-worker event delivery decision (ADR 0003)
+**Decision: multi-worker production support is required.** A process-local singleton is insufficient because a publisher and an SSE subscriber may be attached to different Uvicorn workers. Redis Pub/Sub is the shared transport; each worker subscribes to the same versioned appointment-events channel and fans received messages out to its own bounded local queues.
+
+Redis Pub/Sub is transient (not a durable event log). If a worker is disconnected from Redis, it must log the outage and reconnect with bounded backoff. Events published while a worker is disconnected may be missed; the UI should refetch authoritative appointment state after reconnect/resync. Durable replay is explicitly out of scope for T-011.
+
+The SSE route must not retain a database session for the stream lifetime. Authentication's database dependency must close before the response starts streaming. Event publication is registered for post-commit execution, not fire-and-forget before commit.
 - **Thread Safety:** The active subscriber list in `EventBroadcaster` is protected with `threading.Lock` across concurrent connections.
 - **Dual-Mode 24h Reminder Dispatcher (ADR 0002, NFR-5):**
   1. **HTTP Maintenance Endpoint:** `POST /api/v1/appointments/reminders/dispatch` callable by external cron runners in multi-worker environments.
@@ -162,9 +173,10 @@ N/A.
 | **R-15** Live Server-Sent Events (SSE) Stream | §2 Schemas, §4 Endpoints, §5 Concurrency | `GET /api/v1/appointments/live` |
 | **R-16** Automated Booking/Reschedule Confirmation | §4 Wiring, §5 Concurrency | Triggered in `AppointmentService` on booking/reschedule |
 | **R-17** Scheduled 24-Hour Pre-Appointment Reminder | §2 Schemas, §3 Persistence, §4 Endpoints, §6 Hardening | `POST /api/v1/appointments/reminders/dispatch` + lifespan loop |
-| **NFR-5** Stateless Multi-Worker Operation | §6 State and Hardening, ADR 0002 | Idempotent DB query + external cron trigger support |
+| **NFR-5** Stateless Multi-Worker Operation | §6 State and Hardening, ADR 0002, ADR 0003 | Redis-backed live event fan-out and idempotent reminder dispatch |
 
 ---
 
 ## 11. Open Questions / ADRs
-- [ADR 0002: Dual-Mode 24-Hour Pre-Appointment Reminder Execution](file:///c:/Users/seyi/Documents/Development/Raven/docs/adr/0002-reminder-execution-strategy.md)
+- [ADR 0002: Dual-Mode 24-Hour Pre-Appointment Reminder Execution](../..//docs/adr/0002-reminder-execution-strategy.md)
+- [ADR 0003: Multi-Worker Live Event Broker](../../docs/adr/0003-multi-worker-live-event-broker.md)
