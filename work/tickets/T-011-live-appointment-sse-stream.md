@@ -31,8 +31,8 @@ Front-desk and operatory screens can subscribe to a live Server-Sent Events (SSE
 ## Test plan
 | # | Test name | Seam | Asserts | Expected value comes from |
 |---|---|---|---|---|
-| 1 | `test_sse_stream_emits_appointment_event_on_transition` | Streaming seam (httpx) | event received, event_type == "appointment.checked_in", payload matches | PRD R-15 |
-| 2 | `test_sse_stream_emits_keep_alive_ping_comment` | Streaming seam (httpx) | timeout 15s triggers comment ping `: ping` | PRD R-15 |
+| 1 | `test_sse_stream_emits_appointment_event_on_transition` | Async generator seam | event received, event_type == "appointment.checked_in", payload matches | PRD R-15 |
+| 2 | `test_sse_stream_emits_keep_alive_ping_comment` | Async generator seam | timeout 15s triggers comment ping `: ping` | PRD R-15 |
 | 3 | `test_broadcaster_multiple_subscribers_fan_out` | Service unit | event delivered to queue 1 and queue 2 | Spec 06 §9 |
 | 4 | `test_sse_client_disconnect_cleans_up_subscription` | Service unit | broadcaster subscribers count decreases on exit | Spec 06 §5 |
 | 5 | `test_broadcaster_thread_safety_under_concurrent_subscribe` | Concurrency seam | threading.Lock protects active subscriber set | Standard §7, NFR-5 |
