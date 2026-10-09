@@ -1,7 +1,7 @@
 ---
 id: T-011
 title: Real-time live appointment SSE stream
-status: in-review
+status: changes-requested
 mode: AFK
 blocked_by: T-010
 spec_refs: specs/06-notifications-events.md#2-layer-1, specs/06-notifications-events.md#4-layer-3, specs/06-notifications-events.md#5-layer-4
@@ -70,3 +70,5 @@ Follow the standard's §6 streaming reference: use `EventSourceResponse` and `Se
 ## Review history
 
 - **Round 1** (2026-10-09): changes-requested — B2/M4/m3/n1 — [work/reviews/T-011-review-1.md](work/reviews/T-011-review-1.md)
+
+- **Round 2** (2026-10-09): changes-requested — B2/M4/m1/n0 — [work/reviews/T-011-review-2.md](work/reviews/T-011-review-2.md). Blockers: SSE tests use an in-process ASGI transport incompatible with an infinite stream; authenticated streaming retains a request-scoped DB session for the stream lifetime. Major: pre-commit event publishing, incomplete payload/operation assertions, no cross-worker fan-out, and unbounded subscriber queues. Quality gates not run in this review; GitHub merge commit has no check runs/status contexts.
