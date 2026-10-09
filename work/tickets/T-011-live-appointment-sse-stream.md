@@ -80,3 +80,18 @@ Follow the standard's §6 streaming reference: use `EventSourceResponse` and `Se
 - **Round 1** (2026-10-09): changes-requested — B2/M4/m3/n1 — [work/reviews/T-011-review-1.md](work/reviews/T-011-review-1.md)
 
 - **Round 2** (2026-10-09): changes-requested — B2/M4/m1/n0 — [work/reviews/T-011-review-2.md](work/reviews/T-011-review-2.md). Blockers: SSE tests use an in-process ASGI transport incompatible with an infinite stream; authenticated streaming retains a request-scoped DB session for the stream lifetime. Major: pre-commit event publishing, incomplete payload/operation assertions, no cross-worker fan-out, and unbounded subscriber queues. Quality gates not run in this review; GitHub merge commit has no check runs/status contexts.
+
+
+### Implementation log — resumed after round 2
+
+**Decision:** multi-worker production delivery is required. See [ADR 0003](../../docs/adr/0003-multi-worker-live-event-broker.md).
+
+**Implemented on branch `implement/T-011-redis-multiworker`:**
+- Redis Pub/Sub transport with per-worker local fan-out and lifespan-managed connections.
+- `REDIS_URL` configuration and startup failure if the broker cannot initialize.
+- Bounded subscriber queues; slow clients receive `appointment.resync_required` and are closed.
+- Function-scoped DB dependency cleanup and post-commit event callbacks.
+- Direct SSE generator tests that do not use HTTPX ASGITransport for infinite streams; optional cross-instance Redis integration test via `TEST_REDIS_URL`.
+- Spec and architecture decision updated; local setup documented in `backend/README.md`.
+
+**Not yet complete:** `backend/uv.lock` must be regenerated after adding the Redis dependency. Ruff, format, mypy, pytest and the Redis integration test have not been run in this remote editing environment. Do not mark T-011 done until the local quality gates pass and the integration test is exercised with Redis.
