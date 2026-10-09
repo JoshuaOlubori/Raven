@@ -9,6 +9,7 @@ in ``Dep``.
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
+import logging
 from typing import Annotated
 
 from fastapi import Depends
