@@ -8,8 +8,8 @@ in ``Dep``.
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator, Awaitable, Callable
 import logging
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Annotated
 
 from fastapi import Depends
