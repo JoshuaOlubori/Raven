@@ -1,7 +1,7 @@
 ---
 id: T-010
 title: Appointment lifecycle FSM and immutable audit log
-status: in-review
+status: done
 mode: AFK
 blocked_by: T-009
 spec_refs: specs/05-appointments.md#2-layer-1, specs/05-appointments.md#3-layer-2, specs/05-appointments.md#4-layer-3, specs/05-appointments.md#8-state-machine
