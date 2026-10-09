@@ -301,3 +301,65 @@ async def test_sse_disconnect_cleans_up_subscription() -> None:
         await stream.aclose()
 
     assert await broadcaster.subscriber_count == initial_count
+
+
+async def test_sse_stream_emits_booking_reschedule_and_cancellation_events(
+    sse_receptionist_headers: dict[str, str],
+    sse_test_dentist: Staff,
+    sse_test_patient: Patient,
+    sse_test_service: DentalService,
+    client: AsyncClient,
+) -> None:
+    """Booking, rescheduling and cancellation publish complete live payloads."""
+    broadcaster = get_event_broadcaster()
+    stream = live_router.stream_live_appointments(
+        _request(), _current_user(), broadcaster
+    )
+    pending: asyncio.Task[ServerSentEvent] | None = None
+
+    try:
+        pending = asyncio.create_task(anext(stream))
+        await asyncio.sleep(0)
+        appointment_id = await _create_appointment(
+            client,
+            sse_receptionist_headers,
+            sse_test_dentist,
+            sse_test_patient,
+            sse_test_service,
+        )
+        booked = await asyncio.wait_for(pending, timeout=2.0)
+        assert booked.event == "appointment.booked"
+        assert booked.id == str(appointment_id)
+        assert booked.data["status"] == "SCHEDULED"
+        assert booked.data["patientName"] == "Jane Doe"
+
+        pending = asyncio.create_task(anext(stream))
+        await asyncio.sleep(0)
+        rescheduled_response = await client.post(
+            f"/api/v1/appointments/{appointment_id}/reschedule",
+            headers=sse_receptionist_headers,
+            json={"startTime": "2026-01-05T10:00:00-05:00"},
+        )
+        assert rescheduled_response.status_code == 200, rescheduled_response.text
+        rescheduled = await asyncio.wait_for(pending, timeout=2.0)
+        assert rescheduled.event == "appointment.rescheduled"
+        assert rescheduled.id == str(appointment_id)
+        assert rescheduled.data["startTime"].startswith("2026-01-05T15:00:00")
+
+        pending = asyncio.create_task(anext(stream))
+        await asyncio.sleep(0)
+        cancelled_response = await client.post(
+            f"/api/v1/appointments/{appointment_id}/cancel",
+            headers=sse_receptionist_headers,
+            json={"cancellationReason": "Patient requested cancellation"},
+        )
+        assert cancelled_response.status_code == 200, cancelled_response.text
+        cancelled = await asyncio.wait_for(pending, timeout=2.0)
+        assert cancelled.event == "appointment.cancelled"
+        assert cancelled.id == str(appointment_id)
+        assert cancelled.data["status"] == "CANCELLED"
+    finally:
+        if pending is not None and not pending.done():
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
+        await stream.aclose()
