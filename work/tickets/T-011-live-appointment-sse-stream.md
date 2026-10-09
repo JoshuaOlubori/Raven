@@ -1,7 +1,7 @@
 ---
 id: T-011
 title: Real-time live appointment SSE stream
-status: in-progress
+status: done
 mode: AFK
 blocked_by: T-010
 spec_refs: specs/06-notifications-events.md#2-layer-1, specs/06-notifications-events.md#4-layer-3, specs/06-notifications-events.md#5-layer-4
@@ -81,6 +81,7 @@ Follow the standard's §6 streaming reference: use `EventSourceResponse` and `Se
 - Major: Ruff, format, mypy, pytest, and Redis integration results have not been executed/verified in this remote review environment. Do not mark done until the test exists and all gates pass.
 
 ## Review history
+- **Round 4** (2026-10-09): approved — B0/M0/m0/n0; owner-run quality gates and Redis cross-instance integration test passed; status -> done. See [work/reviews/T-011-review-4.md](../reviews/T-011-review-4.md).
 - **Round 3** (2026-10-09): changes-requested — B0/M2/m0/n0 — [work/reviews/T-011-review-3.md](../reviews/T-011-review-3.md).
 - **Round 2 decision** (2026-10-09): owner chose multi-worker production support; see ADR 0003.
 - **Round 1** (2026-10-09): changes-requested — B2/M4/m3/n1 — [work/reviews/T-011-review-1.md](../reviews/T-011-review-1.md).
@@ -89,7 +90,14 @@ Follow the standard's §6 streaming reference: use `EventSourceResponse` and `Se
 
 **Implementation follow-up after review round 3 (2026-10-09):**
 - Added `backend/tests/integration/test_redis_event_broker.py`.
-- The integration test starts two independent `EventBroadcaster` instances against `TEST_REDIS_URL`, subscribes on the subscriber instance, publishes an `AppointmentLiveEvent` through the publisher instance, and asserts the event's type, appointment/dentist IDs, patient name, status, and start time.
-- The test is skipped only when `TEST_REDIS_URL` is unset. It uses a 5-second delivery timeout and cleans up the subscription and both Redis clients in `finally`.
-- **Validation status:** not executed in this GitHub-only editing environment. No pass is claimed for the focused test, Ruff, formatting, mypy, full pytest, or live Redis integration. Run the commands in `CLAUDE.md` and explicitly run this test with `TEST_REDIS_URL` set on the local machine; record the actual outputs before moving the ticket to `in-review`.
-- **Current state:** `in-progress`, awaiting local validation. Do not mark done until the owner supplies clean quality-gate and Redis integration results.
+- The integration test starts two independent `EventBroadcaster` instances against `TEST_REDIS_URL`, subscribes on the subscriber instance, publishes an `AppointmentLiveEvent` through the publisher instance, and asserts event type, appointment/dentist IDs, patient name, status, start time, and timestamp.
+- The test uses a 5-second delivery timeout and cleans up the subscription and both Redis clients in `finally`.
+- **Owner-run validation (2026-10-09):**
+  - `uv run --directory backend pytest -v tests/integration/test_redis_event_broker.py` with `TEST_REDIS_URL=redis://localhost:6379/1` — **1 passed in 0.12s**; executed, not skipped.
+  - `uv run --directory backend ruff check` — **All checks passed** in a standalone run.
+  - `uv run --directory backend ruff format --check` — **61 files already formatted**.
+  - `uv run --directory backend mypy src` — **Success: no issues found in 38 source files**.
+  - `uv run --directory backend pytest -q` — **141 passed in 7.62s**.
+  - An earlier combined terminal paste showed a UTF-8 error at `work\\TRACKER.md`; the standalone Ruff run subsequently passed. The standalone result is recorded as the lint gate result.
+- **Review round 4:** approved — 0 blockers / 0 majors / 0 minors / 0 nits. See [work/reviews/T-011-review-4.md](../reviews/T-011-review-4.md).
+- **Current state:** `done`. All reported quality gates passed, and the Redis integration test confirmed delivery between two independent broadcaster instances.
