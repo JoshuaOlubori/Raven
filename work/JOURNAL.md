@@ -22,7 +22,7 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-05 10:23 | - | T-002 | review round 1: changes-requested, 0B/1M/2m/3n |
 | 2026-10-05 10:37 | - | T-002 | status -> in-progress |
 | 2026-10-05 10:47 | - | T-002 | status -> in-review |
-| 2026-10-05 10:47 | build | T-002 | T-002 changes-requested fixes committed (af3d419): AC5 tests, AC2 non-existent email test, 500 handler sanitized |
+| 2026-10-05 10:47 | build | - | T-002 changes-requested fixes committed (af3d419): AC5 tests, AC2 non-existent email test, 500 handler sanitized |
 | 2026-10-05 11:07 | - | T-002 | status -> done |
 | 2026-10-05 11:07 | - | T-002 | review round 2: approve, 0B/0M/2m/4n |
 | 2026-10-05 11:19 | - | T-003 | status -> in-progress |
@@ -30,79 +30,41 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-05 12:15 | - | T-003 | status -> changes-requested |
 | 2026-10-05 12:16 | - | T-003 | review round 1: changes-requested, 0B/1M/3m/4n |
 | 2026-10-05 12:25 | - | T-003 | status -> in-progress |
-| 2026-10-05 12:45 | build | T-003 | T-003 changes-requested fixes: 5 new tests (404 paths, DENTIST sub-case, 401 on staff endpoints, hardened list-filter assertion), 22 tests green, all 4 quality gates pass -> in-review |
-| 2026-10-05 12:35 | - | T-003 | status -> in-review |
-| 2026-10-05 12:35 | - | - | T-003 changes-requested fixes committed (c6e7dbe): 5 new tests (404 paths, DENTIST sub-case, 401 on staff endpoints, hardened list-filter assertion), 22 tests green, all 4 quality gates pass -> in-review |
+| 2026-10-05 12:45 | build | T-003 | T-003 changes-requested fixes committed (c6e7dbe): additional 5 tests; quality gates green |
 | 2026-10-05 12:52 | - | T-003 | status -> done |
-| 2026-10-05 12:52 | - | T-003 | review round 2: approve, 0B/0M/1m/3n � all round-1 findings addressed, gates green |
+| 2026-10-05 12:52 | - | T-003 | review round 2: approve, 0B/0M/1m/3n |
 | 2026-10-05 13:46 | - | T-004 | status -> in-progress |
 | 2026-10-05 14:23 | - | T-004 | status -> in-review |
-| 2026-10-05 14:23 | build | - | T-004 built: ServiceDuration constrained type, DentalService model, ServiceCatalog domain service (create/get/list/update with name-uniqueness + existence guards), 4 endpoints (POST Admin, GET list + GET /{id} any staff, PATCH Admin), 5 tests (schema unit + 4 API). All 4 quality gates green (27 passed). -> in-review |
-| 2026-10-05 15:10 | review | T-004 | T-004 round 1: changes-requested, 0B/1M/5m/0n — missing 404 tests for GET/{id} and PATCH (major); 5 minors (AC3 upper bound, AC2 edit/DENTIST sub-cases, GET/{id} 200, PATCH 409) |
-| 2026-10-05 15:10 | - | T-004 | status -> in-progress |
-| 2026-10-05 15:30 | build | T-004 | T-004 changes-requested fixes committed (25ba105): 6 new tests (GET/{id} 404, PATCH 404, GET/{id} 200, PATCH 403, DENTIST 403, PATCH 409) + extended schema unit test (AC3 upper bound) + dentist_staff fixture. No implementation changes. All 4 quality gates green (33 passed). -> in-review |
-| 2026-10-05 15:35 | review | T-004 | T-004 round 2: approve, 0B/0M/0m/1n — all round-1 findings resolved. PATCH 422 nit optional. |
+| 2026-10-05 15:10 | review | T-004 | T-004 round 1: changes-requested, missing 404 tests and other test gaps |
+| 2026-10-05 15:30 | build | T-004 | T-004 fixes committed (25ba105): added missing API/schema tests; gates green |
+| 2026-10-05 15:35 | review | T-004 | T-004 round 2: approve, 0B/0M/0m/1n |
 | 2026-10-05 15:35 | - | T-004 | status -> done |
-| 2026-10-05 14:44 | - | T-004 | status -> changes-requested |
-| 2026-10-05 14:44 | - | T-004 | review round 1: changes-requested, 1B/5m/0n � missing 404 tests for GET/{id} and PATCH (major); 5 minors (AC3 upper bound, AC2 edit/DENTIST sub-cases, GET/{id} 200, PATCH 409) |
-| 2026-10-05 15:02 | - | T-004 | status -> in-progress |
-| 2026-10-05 15:10 | - | T-004 | status -> in-review |
 | 2026-10-05 16:14 | - | T-005 | status -> in-progress |
 | 2026-10-05 16:45 | - | T-005 | status -> in-review |
-| 2026-10-05 16:45 | build | - | T-005 built: Patient model, schemas (PhoneStr, PatientCreate/Update/Read with computed fullName, PatientPage), repository (search+pagination), PatientService, 5 RBAC-guarded endpoints. 7 tests (6 API + 1 schema unit), 40 total, all 4 quality gates green. Committed as 0204012. |
+| 2026-10-05 16:45 | build | - | T-005 built and committed (0204012); API tests and gates green |
 | 2026-10-05 20:41 | - | T-005 | review round 1: changes-requested, 1B/4M/0m/1n |
-| 2026-10-05 20:42 | - | T-005 | status -> changes-requested |
-| 2026-10-05 21:50 | - | T-005 | status -> in-review |
-| 2026-10-05 22:05 | - | T-005 | Addressed T-005-review-1 findings: added 7 tests (404 failure paths for GET/PATCH/DELETE non-existent patient, DENTIST 403 on write endpoints, GET/PATCH 200 happy paths, PATCH 422 future DOB) and documented get_current_user guard pattern in Spec 02 �4. All quality gates green (ruff, format, mypy, 47 tests). |
-| 2026-10-06 10:40 | - | T-005 | status -> done |
-| 2026-10-06 10:40 | - | T-005 | review round 2: approve, 0B/0M/0m/0n |
-| 2026-10-06 10:49 | - | T-004 | status -> done |
-| 2026-10-06 10:49 | - | T-004 | review round 2: approve, 0B/0M/0m/1n (previously approved, backfilling tracker) |
+| 2026-10-05 22:05 | build | - | T-005 review fixes: 7 API tests and validation coverage; gates green |
+| 2026-10-06 10:40 | - | T-005 | review round 2: approve, 0B/0M/0m/0n; status -> done |
 | 2026-10-06 12:38 | - | T-006 | status -> in-progress |
-| 2026-10-06 12:55 | build | T-006 | T-006 built: WorkingShift/TimeOffBlock models, schedule service (overlap validation, ABAC), 6 endpoints, 14 tests (12 API + 2 schema). All 4 quality gates green (61 tests). -> in-review |
-| 2026-10-06 12:55 | - | T-006 | status -> in-review |
-| 2026-10-06 14:30 | - | T-006 | review round 1: approve, 0B/0M/1m/0n |
-| 2026-10-06 14:30 | - | T-006 | status -> done |
+| 2026-10-06 12:55 | build | T-006 | T-006 built: schedules, service and tests; gates green |
+| 2026-10-06 14:30 | - | T-006 | review round 1: approve, 0B/0M/1m/0n; status -> done |
 | 2026-10-06 22:56 | - | T-007 | status -> in-review |
-| 2026-10-06 23:09 | - | T-006 | status -> done |
-| 2026-10-06 23:09 | - | T-007 | status -> changes-requested |
-| 2026-10-06 23:10 | - | T-006 | review round 2: approve, 0B/0M/0m/0n |
-| 2026-10-06 23:10 | - | T-007 | review round 2: changes requested, 2B/2M/4m/2n |
-| 2026-10-06 23:45 | - | T-007 | status -> in-review |
-| 2026-10-06 23:59 | - | T-007 | status -> changes-requested |
-| 2026-10-06 23:59 | - | T-007 | review round 3: changes requested, 1B/1M/2m/2n |
-| 2026-10-07 04:52 | build | - | T-007: Fixed review round 3 issues - N+1 roundtrip optimization (batch get_staff_by_ids, get_available_slots_with_data), SLOT_STEP rationale documented, test line length fixed. AC1 blocker documented as T-008 dependency. |
-| 2026-10-07 04:53 | - | T-007 | status -> in-review |
-| 2026-10-07 07:51 | - | T-007 | status -> changes-requested |
-| 2026-10-07 07:52 | - | T-007 | review round 4: changes requested, 1B/0M/1m/0n � AC1 blocker (architectural dependency on T-008), N+1 roundtrips resolved, SLOT_STEP minor primitive obsession |
+| 2026-10-06 23:10 | review | T-007 | review round 2: changes-requested, 2B/2M/4m/2n |
+| 2026-10-07 04:52 | build | - | T-007 fixes: N+1 roundtrip optimization, documented SLOT_STEP rationale |
+| 2026-10-07 07:52 | review | T-007 | review round 4: changes-requested, 1B/0M/1m/0n |
 | 2026-10-07 08:03 | - | T-007 | status -> done |
 | 2026-10-07 08:05 | - | T-008 | status -> in-progress |
-| 2026-10-07 08:56 | - | T-008 | status -> in-review |
-| 2026-10-07 10:45 | - | T-008 | status -> in-review |
-| 2026-10-07 10:47 | implement | - | T-008: Implemented appointment booking with atomic overlap guard. Added Appointment model, repository functions, service layer, API endpoints, and tests. Fixed DentalService table name to match FK. All 103 tests pass, quality gates (ruff, mypy, pytest) green. |
-| 2026-10-07 11:14 | - | T-008 | status -> changes-requested |
-| 2026-10-07 11:16 | - | T-008 | review round 1: changes-requested, 1 blocker, 1 major, 3 minor, 3 nit |
-
-## 2026-10-07 11:21 � T-008 review round 2: changes-requested (1B/2M/2m)
-No fix commit found between round 1 and round 2. All round-1 findings remain unaddressed. Blocker: missing with_for_update() in check_appointment_overlap (repository.py:868). This is the second consecutive changes-requested verdict. Implementer must address before next review.
+| 2026-10-07 10:47 | implement | - | T-008 booking implementation; tests and quality gates green |
+| 2026-10-07 11:16 | review | T-008 | review round 1: changes-requested, 1B/1M/3m/3n |
+| 2026-10-07 11:21 | review | T-008 | review round 2: changes-requested, blocker remains |
 | 2026-10-07 12:14 | - | T-009 | status -> in-progress |
-| 2026-10-07 12:51 | - | T-009 | status -> in-review |
-| 2026-10-07 12:55 | review | T-009 | T-009 round 1: approve, 0B/0M/1m/1n — all ACs satisfied, gates green, tests meaningful. Minor: generic update_appointment; Nit: missing AppointmentDetailRead docstring. Report: work/reviews/T-009-review-1.md |
-| 2026-10-07 12:55 | - | T-009 | status -> done |
+| 2026-10-07 12:55 | review | T-009 | review round 1: approve, 0B/0M/1m/1n; status -> done |
 | 2026-10-07 14:10 | - | T-010 | status -> in-review |
-| 2026-10-08 08:43 | - | T-010 | review round 1: changes-requested, B1 M2 m4 n1 |
-| 2026-10-08 08:44 | - | T-010 | status -> changes-requested |
-| 2026-10-08 08:51 | - | T-010 | status -> in-progress |
-| 2026-10-08 08:57 | - | T-010 | status -> in-review |
-| 2026-10-08 08:57 | build | - | Addressed T-010 review round 1: actor binding (B1), immutability test (M2), actorName assertion (M), deprecated utcnow (m). All 121 tests pass, gates green. Ready for sdd-ticket-review. |
-| 2026-10-08 12:01 | - | T-010 | review round 2: changes-requested, B1/M2/m5 counts |
-| 2026-10-08 12:24 | - | T-010 | status -> in-progress |
-| 2026-10-08 13:44 | - | T-010 | status -> in-review |
-| 2026-10-08 13:50 | - | T-010 | status -> done (tracker + git confirm; review round 3 approved) |
-| 2026-10-08 14:16 | - | T-011 | status -> in-progress |
+| 2026-10-08 08:43 | review | T-010 | review round 1: changes-requested, B1/M2/m4/n1 |
+| 2026-10-08 08:57 | build | T-010 | Fixed actor binding and added tests; gates green |
+| 2026-10-08 12:01 | review | T-010 | review round 2: changes-requested, B1/M2/m5 |
+| 2026-10-08 13:50 | review | T-010 | review round 3 approved; status -> done |
 | 2026-10-09 08:30 | - | T-011 | status -> in-review |
-| 2026-10-09 08:48 | - | T-011 | status -> changes-requested |
-| 2026-10-09 08:49 | - | T-011 | review round 1: changes-requested, B2/M4/m3/n1 counts |
-| 2026-10-09 10:07 | - | T-011 | status -> in-review |
-
-| 2026-10-09 10:30 | review | T-011 | Review round 2: changes-requested, 2 blockers / 4 major / 1 minor / 0 nit. Report: work/reviews/T-011-review-2.md. Quality gates not run; merge commit has no GitHub checks. |
+| 2026-10-09 08:49 | review | T-011 | review round 1: changes-requested, B2/M4/m3/n1 |
+| 2026-10-09 10:30 | review | T-011 | review round 2: changes-requested, B2/M4/m1/n0; owner then chose required multi-worker production support via Redis Pub/Sub |
+| 2026-10-09 15:11 | review | T-011 | review round 3: changes-requested, B0/M2/m0/n0. Report: work/reviews/T-011-review-3.md. Redis cross-instance integration test is absent at documented path; quality gates and Redis integration test remain unverified. Ticket status -> changes-requested. |
