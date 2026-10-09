@@ -93,6 +93,7 @@ class AppointmentService:
             status=appointment.status,
             startTime=appointment.start_time,
         )
+
         async def publish_after_commit() -> None:
             """Publish only after the appointment transaction commits successfully."""
             try:
@@ -120,6 +121,7 @@ class AppointmentService:
         if task.exception() is not None:
             logger = logging.getLogger("app.appointment_service")
             error = task.exception()
+            assert error is not None  # checked above
             logger.error(
                 "Background task failed: task=%s error=%r",
                 task.get_name(),

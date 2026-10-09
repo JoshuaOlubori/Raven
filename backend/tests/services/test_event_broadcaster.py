@@ -245,7 +245,6 @@ class TestBroadcasterQueueFullHandling:
         await broadcaster.unsubscribe(queue)
 
 
-
 @pytest.mark.skipif(
     not os.getenv("TEST_REDIS_URL"),
     reason="Set TEST_REDIS_URL to run the cross-worker Redis integration test",

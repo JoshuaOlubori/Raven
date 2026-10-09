@@ -58,7 +58,9 @@ async def stream_live_appointments(
         while True:
             try:
                 # Wait for next event with a 15-second timeout for keep-alive
-                event_data = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_SECONDS)
+                event_data = await asyncio.wait_for(
+                    queue.get(), timeout=HEARTBEAT_SECONDS
+                )
                 if event_data is None:
                     logger.warning(
                         "SSE slow consumer requires resync: user_id=%s",

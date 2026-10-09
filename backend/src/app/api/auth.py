@@ -26,6 +26,7 @@ from app.db.repository import get_staff_by_id
 from app.db.session import SessionLocal
 from app.exceptions import ForbiddenError
 from app.schemas import StaffRole
+from app.services.auth_service import AuthService
 
 security = HTTPBearer()
 

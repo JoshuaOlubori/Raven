@@ -367,7 +367,6 @@ async def test_sse_stream_emits_booking_reschedule_and_cancellation_events(
         await stream.aclose()
 
 
-
 async def test_sse_slow_consumer_gets_resync_signal() -> None:
     """A full queue terminates a slow stream with an explicit refetch signal."""
     broadcaster = EventBroadcaster(queue_maxsize=1)

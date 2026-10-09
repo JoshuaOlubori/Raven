@@ -7,6 +7,7 @@ messages into bounded local queues for its own SSE connections.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from threading import Lock
 from typing import TYPE_CHECKING, Any
@@ -63,10 +64,8 @@ class EventBroadcaster:
         self._listener_task = None
         if task is not None:
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
 
         if self._pubsub is not None:
             await self._pubsub.aclose()
@@ -95,7 +94,9 @@ class EventBroadcaster:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logger.exception("Redis appointment event listener failed; reconnecting")
+                logger.exception(
+                    "Redis appointment event listener failed; reconnecting"
+                )
                 await asyncio.sleep(1.0)
                 if self._redis is None:
                     return
@@ -106,7 +107,9 @@ class EventBroadcaster:
                     await self._pubsub.subscribe(EVENT_CHANNEL)
                     logger.info("Redis appointment event subscription restored")
                 except Exception:
-                    logger.exception("Could not restore Redis appointment event subscription")
+                    logger.exception(
+                        "Could not restore Redis appointment event subscription"
+                    )
                     await asyncio.sleep(2.0)
 
     async def subscribe(self) -> asyncio.Queue[AppointmentLiveEvent | None]:
@@ -141,7 +144,7 @@ class EventBroadcaster:
         await self._redis.publish(EVENT_CHANNEL, payload)
 
     async def _fan_out(self, event: AppointmentLiveEvent) -> None:
-        """Fan out an event locally; terminate slow consumers instead of growing memory."""
+        """Fan out an event locally; terminate slow consumers."""
         async with self._lock:
             subscribers = list(self._subscribers)
 

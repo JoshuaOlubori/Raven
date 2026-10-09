@@ -18,7 +18,6 @@ from starlette.responses import JSONResponse, Response
 
 from app.config import get_settings
 from app.db.session import init_db
-from app.services.event_broadcaster import get_event_broadcaster
 from app.exceptions import DomainError
 from app.models.appointment import (  # noqa: F401 — register table on Base.metadata
     Appointment,
@@ -41,6 +40,7 @@ from app.routers.patients import router as patients_router
 from app.routers.schedules import router as schedules_router
 from app.routers.services import router as services_router
 from app.routers.staff import router as staff_router
+from app.services.event_broadcaster import get_event_broadcaster
 
 logger = logging.getLogger("app")
 
