@@ -69,3 +69,5 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-09 10:30 | review | T-011 | review round 2: changes-requested, B2/M4/m1/n0; owner then chose required multi-worker production support via Redis Pub/Sub |
 | 2026-10-09 15:11 | review | T-011 | review round 3: changes-requested, B0/M2/m0/n0. Report: work/reviews/T-011-review-3.md. Redis cross-instance integration test is absent at documented path; quality gates and Redis integration test remain unverified. Ticket status -> changes-requested. |
 | 2026-10-09 16:43 | implement | T-011 | Added Redis cross-instance integration test at backend/tests/integration/test_redis_event_broker.py; test and quality gates not run in remote GitHub editor. Ticket remains in-progress pending owner-run validation. |
+
+| 2026-10-09 22:38 | review | T-011 | Round 4 approved (B0/M0/m0/n0); owner confirmed Redis integration 1 passed, Ruff/format/mypy clean, full pytest 141 passed; status -> done. See work/reviews/T-011-review-4.md. |
