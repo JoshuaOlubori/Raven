@@ -22,8 +22,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.api.deps import AuthServiceDep, DbSessionDep
 from app.config import get_settings
-from app.db.session import SessionLocal
 from app.db.repository import get_staff_by_id
+from app.db.session import SessionLocal
 from app.exceptions import ForbiddenError
 from app.schemas import StaffRole
 
