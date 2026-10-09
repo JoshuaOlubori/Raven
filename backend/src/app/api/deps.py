@@ -8,7 +8,7 @@ in ``Dep``.
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Annotated
 
 from fastapi import Depends
@@ -37,10 +37,21 @@ from app.services.service_catalog import ServiceCatalog
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession]:
+    """Commit the request transaction, then run callbacks registered by services."""
     session = SessionLocal()
     try:
         yield session
         await session.commit()
+        callbacks: list[Callable[[], Awaitable[None]]] = session.info.pop(
+            "after_commit_callbacks", []
+        )
+        for callback in callbacks:
+            try:
+                await callback()
+            except Exception:
+                logging.getLogger("app.db_session").exception(
+                    "Post-commit callback failed"
+                )
     except Exception:
         await session.rollback()
         raise
@@ -48,7 +59,11 @@ async def get_db_session() -> AsyncGenerator[AsyncSession]:
         await session.close()
 
 
-DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
+# Function-scoped cleanup is important for streaming endpoints: DB sessions
+# must close before the response body starts streaming.
+DbSessionDep = Annotated[
+    AsyncSession, Depends(get_db_session, scope="function")
+]
 
 
 # ---------------------------------------------------------------------------
