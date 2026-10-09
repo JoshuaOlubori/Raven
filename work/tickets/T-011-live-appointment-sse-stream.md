@@ -71,11 +71,29 @@ Follow the standard's §6 streaming reference: use `EventSourceResponse` and `Se
 - Event types follow pattern: `appointment.booked`, `appointment.rescheduled`, `appointment.cancelled`, `appointment.confirmed`, `appointment.checked_in`, `appointment.started`, `appointment.completed`, `appointment.no_show`
 - Used camelCase aliases in `AppointmentLiveEvent` constructor to satisfy mypy with `populate_by_name=True`
 
-**Commands run:**
+**Commands run (initial remote):**
 - `uv run ruff check` ✅
 - `uv run ruff format --check` ✅
 - `uv run mypy src` ✅
 - `uv run pytest -q` ✅ (121 tests passed)
+
+**Local validation (2026-10-09):**
+- `uv lock --directory backend` ✅ (added redis 8.1.0)
+- `uv run --directory backend ruff check` ✅
+- `uv run --directory backend ruff format --check src/` ✅
+- `uv run --directory backend mypy src` ✅
+- `uv run --directory backend pytest -q` ✅ (140 tests passed, 0 skipped)
+- Redis cross-worker integration test ✅ (TEST_REDIS_URL=redis://localhost:6379/0)
+
+**Fixes applied locally:**
+- Added missing `AuthService` import in `backend/src/app/api/auth.py`
+- Fixed import ordering in `backend/src/app/main.py`
+- Fixed line length in `backend/src/app/routers/live.py`
+- Fixed mypy error in `backend/src/app/services/appointment_service.py` (assert error is not None)
+- Fixed ruff issues in `backend/src/app/services/event_broadcaster.py` (contextlib.suppress, line lengths)
+- Fixed formatting in test files
+
+**Commit:** `d0c1379` — T-011: fix quality gates and add Redis integration test
 
 ## Review history
 
