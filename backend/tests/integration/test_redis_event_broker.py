@@ -42,12 +42,14 @@ async def test_redis_pubsub_delivers_event_between_broadcaster_instances() -> No
         await publisher_worker.publish(event)
         received = await asyncio.wait_for(queue.get(), timeout=5.0)
 
+        assert received is not None
         assert received.event_type == event.event_type
         assert received.appointment_id == event.appointment_id
         assert received.dentist_id == event.dentist_id
         assert received.patient_name == event.patient_name
         assert received.status == event.status
         assert received.start_time == event.start_time
+        assert received.timestamp == event.timestamp
     finally:
         if queue is not None:
             await subscriber_worker.unsubscribe(queue)
