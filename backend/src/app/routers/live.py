@@ -59,6 +59,16 @@ async def stream_live_appointments(
             try:
                 # Wait for next event with a 15-second timeout for keep-alive
                 event_data = await asyncio.wait_for(queue.get(), timeout=15.0)
+                if event_data is None:
+                    logger.warning(
+                        "SSE slow consumer requires resync: user_id=%s",
+                        user_id,
+                    )
+                    yield ServerSentEvent(
+                        data={"reason": "slow_consumer", "action": "refetch"},
+                        event="appointment.resync_required",
+                    )
+                    return
                 logger.debug("SSE sending event: %s", event_data.event_type)
                 yield ServerSentEvent(
                     data=event_data.model_dump(by_alias=True, mode="json"),
