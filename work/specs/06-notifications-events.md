@@ -97,7 +97,7 @@ Following the standard's §6 streaming guidelines (`response_class=EventSourceRe
 ```python
 @router.get("/live", response_class=EventSourceResponse)
 async def stream_live_appointments(
-    current_user: CurrentUserDep,
+    current_user: CurrentUserStreamDep,  # short-lived auth DB session
     broadcaster: EventBroadcasterDep,
 ) -> AsyncIterable[ServerSentEvent]:
     queue = await broadcaster.subscribe()
@@ -106,12 +106,18 @@ async def stream_live_appointments(
             try:
                 # Wait for next event with a 15-second timeout for keep-alive
                 event_data = await asyncio.wait_for(queue.get(), timeout=15.0)
+                if event_data is None:
+                    yield ServerSentEvent(
+                        data={"reason": "slow_consumer", "action": "refetch"},
+                        event="appointment.resync_required",
+                    )
+                    return
                 yield ServerSentEvent(
                     data=event_data.model_dump(by_alias=True, mode="json"),
                     event=event_data.event_type,
                     id=str(event_data.appointment_id),
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Periodic keep-alive ping comment to prevent client/proxy timeouts
                 yield ServerSentEvent(comment="ping")
     finally:
