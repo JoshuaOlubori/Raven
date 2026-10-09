@@ -19,6 +19,7 @@ from starlette.requests import Request
 from app.api.auth import CurrentUser
 from app.models import DentalService, Patient, Staff, WorkingShift
 from app.routers import live as live_router
+from app.schemas import AppointmentLiveEvent
 from app.services.event_broadcaster import (
     EventBroadcaster,
     get_event_broadcaster,
@@ -379,8 +380,6 @@ async def test_sse_slow_consumer_gets_resync_signal() -> None:
         async with asyncio.timeout(1.0):
             while await broadcaster.subscriber_count != 1:
                 await asyncio.sleep(0)
-
-        from app.schemas import AppointmentLiveEvent
 
         event = AppointmentLiveEvent(
             eventType="appointment.booked",
