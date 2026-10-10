@@ -4,6 +4,10 @@ Thin wiring only (Standard §2): lifespan-managed DB initialization,
 correlation-ID propagation middleware, structured logging on unhandled
 errors, the standardized error handlers (Architecture §4), and router
 mounting.  No business logic lives here.
+
+Database schema management is handled by Alembic migrations.
+The lifespan does NOT call create_all() - production deployments must
+run 'alembic upgrade head' before starting the application.
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ from fastapi import FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
 from app.config import get_settings
-from app.db.session import SessionLocal, init_db
+from app.db.session import SessionLocal
 from app.exceptions import DomainError
 from app.models.appointment import (  # noqa: F401 — register table on Base.metadata
     Appointment,
@@ -84,8 +88,12 @@ async def _dispatch_reminders_once(notification_service: NotificationService) ->
 
 @contextlib.asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
-    """Initialize shared resources and release them during application shutdown."""
-    await init_db()
+    """Initialize shared resources and release them during application shutdown.
+
+    Does NOT create database schema - that must be done via Alembic migrations
+    before starting the application (T-013). Test environments use conftest.py
+    to call init_db() explicitly against a test database.
+    """
     broadcaster = get_event_broadcaster()
     await broadcaster.start(get_settings().redis_url)
 
