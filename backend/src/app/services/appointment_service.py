@@ -211,10 +211,19 @@ class AppointmentService:
         )
         self._publish_event(EventType.APPOINTMENT_BOOKED, appointment)
 
-        # 7. Send booking confirmation (fire-and-forget, R-16)
-        asyncio.create_task(
-            self._notification_service.send_booking_confirmation(appointment)
-        ).add_done_callback(self._log_task_exception)
+        # 7. Send booking confirmation after commit (R-16, Spec 06 §6)
+        async def send_booking_confirmation_after_commit() -> None:
+            try:
+                await self._notification_service.send_booking_confirmation(appointment)
+            except Exception:
+                logging.getLogger("app.appointment_service").exception(
+                    "Booking confirmation dispatch failed after commit: "
+                    "appointment_id=%s",
+                    appointment.id,
+                )
+
+        callbacks = self._session.info.setdefault("after_commit_callbacks", [])
+        callbacks.append(send_booking_confirmation_after_commit)
 
         return appointment
 
@@ -362,10 +371,25 @@ class AppointmentService:
         )
         self._publish_event(EventType.APPOINTMENT_RESCHEDULED, appointment)
 
-        # 11. Send reschedule confirmation (fire-and-forget, R-16)
-        asyncio.create_task(
-            self._notification_service.send_reschedule_confirmation(appointment)
-        ).add_done_callback(self._log_task_exception)
+        # 11. Send reschedule confirmation after commit (R-16, Spec 06 §6)
+        # Capture old and new times for the confirmation payload
+        old_start = old_start_time
+        new_start = new_start_time
+
+        async def send_reschedule_confirmation_after_commit() -> None:
+            try:
+                await self._notification_service.send_reschedule_confirmation(
+                    appointment, old_start, new_start
+                )
+            except Exception:
+                logging.getLogger("app.appointment_service").exception(
+                    "Reschedule confirmation dispatch failed after commit: "
+                    "appointment_id=%s",
+                    appointment.id,
+                )
+
+        callbacks = self._session.info.setdefault("after_commit_callbacks", [])
+        callbacks.append(send_reschedule_confirmation_after_commit)
 
         return appointment
 

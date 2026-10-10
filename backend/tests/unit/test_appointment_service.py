@@ -40,14 +40,21 @@ class FakeNotificationService(NotificationService):
 
     def __init__(self) -> None:
         self.dispatched_bookings: list[Appointment] = []
-        self.dispatched_reschedules: list[Appointment] = []
+        self.dispatched_reschedules: list[tuple[Appointment, datetime, datetime]] = []
         self.dispatched_reminders: list[Appointment] = []
 
     async def send_booking_confirmation(self, appointment: Appointment) -> None:
         self.dispatched_bookings.append(appointment)
 
-    async def send_reschedule_confirmation(self, appointment: Appointment) -> None:
-        self.dispatched_reschedules.append(appointment)
+    async def send_reschedule_confirmation(
+        self,
+        appointment: Appointment,
+        old_start_time: datetime,
+        new_start_time: datetime,
+    ) -> None:
+        self.dispatched_reschedules.append(
+            (appointment, old_start_time, new_start_time)
+        )
 
     async def send_reminder(self, appointment: Appointment) -> None:
         self.dispatched_reminders.append(appointment)
@@ -713,11 +720,11 @@ async def test_booking_dispatches_confirmation_asynchronously(
         start_time=target_date,
     )
 
-    # The confirmation should have been dispatched (fire-and-forget)
-    # We need to wait for the background task to complete
-    import asyncio
-
-    await asyncio.sleep(0.1)
+    # Commit the session and run after_commit_callbacks (mimics get_db_session)
+    await appointment_service._session.commit()
+    callbacks = appointment_service._session.info.pop("after_commit_callbacks", [])
+    for callback in callbacks:
+        await callback()
 
     # Verify the fake notification service captured the booking confirmation
     assert len(fake_notifications.dispatched_bookings) == 1
@@ -726,6 +733,58 @@ async def test_booking_dispatches_confirmation_asynchronously(
     assert dispatched.patient_id == test_patient.id
     assert dispatched.dentist_id == test_dentist.id
     assert dispatched.service_id == test_service.id
+
+
+async def test_booking_confirmation_not_dispatched_on_rollback(
+    appointment_service: AppointmentService,
+    test_dentist: Staff,
+    test_patient,
+    test_service: DentalService,
+    monday_shift: WorkingShift,
+    clinic_tz: ZoneInfo,
+) -> None:
+    """T-012: Booking confirmation NOT dispatched if transaction rolls back.
+
+    Given a booking that fails validation after the confirmation would be
+    queued, when the transaction rolls back, then no confirmation is sent.
+    """
+    # Replace notification service with fake
+    fake_notifications = FakeNotificationService()
+    appointment_service._notification_service = fake_notifications
+
+    target_date = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).astimezone(
+        ZoneInfo("UTC")
+    )
+
+    # Book successfully first
+    appointment = await appointment_service.book_appointment(
+        patient_id=test_patient.id,
+        dentist_id=test_dentist.id,
+        service_id=test_service.id,
+        start_time=target_date,
+    )
+    # Commit and run callbacks for first booking
+    await appointment_service._session.commit()
+    callbacks = appointment_service._session.info.pop("after_commit_callbacks", [])
+    for callback in callbacks:
+        await callback()
+
+    # Now try to book an overlapping appointment (should fail and rollback)
+    from app.exceptions import AppointmentOverlapConflictError
+
+    with pytest.raises(AppointmentOverlapConflictError):
+        await appointment_service.book_appointment(
+            patient_id=test_patient.id,
+            dentist_id=test_dentist.id,
+            service_id=test_service.id,
+            start_time=target_date,
+        )
+    # The session is rolled back by the service, but the first booking's
+    # confirmation was already sent. The second booking's confirmation should
+    # not be sent because it rolls back.
+    # We verify that only ONE booking confirmation was dispatched (for the first)
+    assert len(fake_notifications.dispatched_bookings) == 1
+    assert fake_notifications.dispatched_bookings[0].id == appointment.id
 
 
 async def test_reschedule_dispatches_reschedule_confirmation(
@@ -752,6 +811,14 @@ async def test_reschedule_dispatches_reschedule_confirmation(
         service_id=test_service.id,
         start_time=target_date,
     )
+    # Commit and run callbacks for the booking
+    await appointment_service._session.commit()
+    callbacks = appointment_service._session.info.pop("after_commit_callbacks", [])
+    for callback in callbacks:
+        await callback()
+
+    # Capture the old start time
+    old_start_time = appointment.start_time
 
     # Replace notification service with fake
     fake_notifications = FakeNotificationService()
@@ -768,14 +835,19 @@ async def test_reschedule_dispatches_reschedule_confirmation(
         actor_id=test_dentist.id,
     )
 
-    # Wait for background task
-    import asyncio
-
-    await asyncio.sleep(0.1)
+    # Commit the session and run after_commit_callbacks
+    await appointment_service._session.commit()
+    callbacks = appointment_service._session.info.pop("after_commit_callbacks", [])
+    for callback in callbacks:
+        await callback()
 
     # Verify the fake notification service captured the reschedule confirmation
     assert len(fake_notifications.dispatched_reschedules) == 1
     dispatched = fake_notifications.dispatched_reschedules[0]
-    assert dispatched.id == appointment.id
-    # The appointment should have the new start_time
-    assert dispatched.start_time == new_start_time.replace(tzinfo=None)
+    dispatched_appt, dispatched_old, dispatched_new = dispatched
+    assert dispatched_appt.id == appointment.id
+    # Verify both old and new times are present
+    assert dispatched_old == old_start_time
+    assert dispatched_new == new_start_time  # timezone-aware UTC
+    # The appointment should have the new start_time (stored as naive UTC)
+    assert appointment.start_time == new_start_time.replace(tzinfo=None)

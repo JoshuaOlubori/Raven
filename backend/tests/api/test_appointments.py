@@ -1478,3 +1478,43 @@ async def test_reminder_dispatch_unauthenticated_401(client: AsyncClient) -> Non
     """Unauthenticated reminder dispatch → 401."""
     response = await client.post("/api/v1/appointments/reminders/dispatch")
     assert response.status_code == 401
+
+
+async def test_reminder_dispatch_concurrent_requests_no_duplicates(
+    reminder_test_setup: dict,
+    client: AsyncClient,
+    test_session_local,
+) -> None:
+    """T-012: Concurrent reminder dispatch requests send only one notification.
+
+    Given two simultaneous POST /reminders/dispatch calls for the same
+    appointment window, only one reminder is dispatched per appointment.
+    This verifies the atomic claim (UPDATE ... WHERE reminder_sent_at IS NULL
+    RETURNING) prevents duplicate sends under concurrent triggers (ADR 0002).
+    """
+    import asyncio
+
+    setup = reminder_test_setup
+    admin_headers = setup["admin_headers"]
+
+    # Fire two concurrent dispatch requests
+    async def dispatch():
+        return await client.post(
+            "/api/v1/appointments/reminders/dispatch",
+            headers=admin_headers,
+        )
+
+    response1, response2 = await asyncio.gather(dispatch(), dispatch())
+
+    # Both should return 200
+    assert response1.status_code == 200
+    assert response2.status_code == 200
+
+    # Total dispatched across both should be 1 (only the 24h appointment)
+    dispatched1 = response1.json()["dispatchedCount"]
+    dispatched2 = response2.json()["dispatchedCount"]
+    total_dispatched = dispatched1 + dispatched2
+    assert total_dispatched == 1, (
+        f"Expected exactly 1 reminder dispatched across concurrent calls, "
+        f"got {total_dispatched} ({dispatched1} + {dispatched2})"
+    )

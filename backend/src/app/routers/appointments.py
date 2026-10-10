@@ -7,6 +7,7 @@ handler is the *last* stop before the service layer.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Annotated
 from uuid import UUID
@@ -15,7 +16,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.api.auth import CurrentUserDep, get_current_user, require_roles
 from app.api.deps import AppointmentServiceDep, DbSessionDep, NotificationServiceDep
-from app.db.repository import list_pending_reminders, mark_reminder_sent
+from app.db.repository import claim_pending_reminders
 from app.models.appointment import Appointment
 from app.schemas import (
     AppointmentCancel,
@@ -300,7 +301,8 @@ async def dispatch_reminders_endpoint(
     Protected maintenance endpoint for external cron runners in multi-worker
     environments. Returns count of dispatched reminders and the time window checked.
 
-    Idempotent: uses WHERE reminder_sent_at IS NULL to prevent duplicate dispatches.
+    Idempotent: uses atomic claim (UPDATE ... WHERE reminder_sent_at IS NULL RETURNING)
+    to prevent duplicate dispatches under concurrent triggers (ADR 0002).
     """
     from datetime import timedelta
     from zoneinfo import ZoneInfo
@@ -312,18 +314,21 @@ async def dispatch_reminders_endpoint(
     window_start = now_naive + timedelta(hours=23)
     window_end = now_naive + timedelta(hours=25)
 
-    # Query pending reminders
-    pending_appointments = await list_pending_reminders(
-        session, window_start, window_end
+    # Atomically claim pending reminders (sets reminder_sent_at) and fetch them
+    claimed_appointments = await claim_pending_reminders(
+        session, window_start, window_end, now_utc
     )
 
     dispatched_count = 0
-    for appointment in pending_appointments:
+    for appointment in claimed_appointments:
         # Dispatch reminder via notification service
-        await notification_service.send_reminder(appointment)
-        # Mark reminder as sent (idempotent: WHERE reminder_sent_at IS NULL)
-        await mark_reminder_sent(session, appointment.id, now_utc)
-        dispatched_count += 1
+        try:
+            await notification_service.send_reminder(appointment)
+            dispatched_count += 1
+        except Exception:
+            logging.getLogger("app.appointments").exception(
+                "Failed to dispatch reminder for appointment %s", appointment.id
+            )
 
     await session.commit()
 

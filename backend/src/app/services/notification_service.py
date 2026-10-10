@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -16,6 +17,23 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger("app.notifications")
+
+
+class RescheduleConfirmationData:
+    """Immutable data carrier for reschedule confirmation notifications.
+
+    Contains both old and new appointment times for patient-facing messages.
+    """
+
+    def __init__(
+        self,
+        appointment: Appointment,
+        old_start_time: datetime,
+        new_start_time: datetime,
+    ) -> None:
+        self.appointment = appointment
+        self.old_start_time = old_start_time
+        self.new_start_time = new_start_time
 
 
 class NotificationService(ABC):
@@ -29,17 +47,27 @@ class NotificationService(ABC):
     async def send_booking_confirmation(self, appointment: Appointment) -> None:
         """Send a booking confirmation to the patient.
 
-        Called after a new appointment is successfully booked or rescheduled.
+        Called after a new appointment is successfully booked.
         Must not block the calling request (fire-and-forget or background task).
         """
         ...
 
     @abstractmethod
-    async def send_reschedule_confirmation(self, appointment: Appointment) -> None:
+    async def send_reschedule_confirmation(
+        self,
+        appointment: Appointment,
+        old_start_time: datetime,
+        new_start_time: datetime,
+    ) -> None:
         """Send a rescheduling confirmation to the patient.
 
         Called after an appointment is successfully rescheduled.
         Must not block the calling request.
+
+        Args:
+            appointment: The rescheduled appointment.
+            old_start_time: The previous start time (timezone-aware UTC).
+            new_start_time: The new start time (timezone-aware UTC).
         """
         ...
 
@@ -75,19 +103,25 @@ class LoggingNotificationService(NotificationService):
             appointment.start_time.isoformat(),
         )
 
-    async def send_reschedule_confirmation(self, appointment: Appointment) -> None:
-        """Log reschedule confirmation payload."""
+    async def send_reschedule_confirmation(
+        self,
+        appointment: Appointment,
+        old_start_time: datetime,
+        new_start_time: datetime,
+    ) -> None:
+        """Log reschedule confirmation payload with old and new times."""
         patient_name = (
             f"{appointment.patient.first_name} {appointment.patient.last_name}"
         )
         logger.info(
             "RESCHEDULE_CONFIRMATION: appointment_id=%s patient=%s "
-            "dentist=%s service=%s new_start=%s",
+            "dentist=%s service=%s old_start=%s new_start=%s",
             appointment.id,
             patient_name,
             appointment.dentist.full_name,
             appointment.service.name,
-            appointment.start_time.isoformat(),
+            old_start_time.isoformat(),
+            new_start_time.isoformat(),
         )
 
     async def send_reminder(self, appointment: Appointment) -> None:

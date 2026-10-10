@@ -1,7 +1,7 @@
 ---
 id: T-012
 title: Booking confirmations and 24h reminder dispatcher
-status: in-progress
+status: changes-requested
 mode: AFK
 blocked_by: T-010
 spec_refs: specs/06-notifications-events.md#2-layer-1, specs/06-notifications-events.md#3-layer-2, specs/06-notifications-events.md#4-layer-3, specs/06-notifications-events.md#6-layer-5
@@ -46,21 +46,28 @@ Follow ADR 0002 dual-mode execution strategy: the maintenance endpoint supports 
 
 ## Implementation log
 - Added `ReminderDispatchResult` schema to `src/app/schemas.py` (Spec 06 §2)
-- Added `list_pending_reminders` and `mark_reminder_sent` repository functions to `src/app/db/repository.py` with proper timezone handling (naive UTC for database)
-- Added reminder dispatch endpoint `POST /api/v1/appointments/reminders/dispatch` to `src/app/routers/appointments.py` with Admin-only RBAC guard
-- Added in-process reminder worker loop in `src/app/main.py` lifespan (controlled by `ENABLE_IN_PROCESS_REMINDER_WORKER` setting)
-- Wired booking confirmation dispatch in `AppointmentService.book_appointment()` (fire-and-forget via `asyncio.create_task`)
-- Wired reschedule confirmation dispatch in `AppointmentService.reschedule_appointment()` (fire-and-forget)
-- Added `FakeNotificationService` test helper capturing dispatched notifications
+- Added `list_pending_reminders`, `mark_reminder_sent`, and `claim_pending_reminders` repository functions to `src/app/db/repository.py` with atomic claim via UPDATE ... WHERE reminder_sent_at IS NULL RETURNING
+- Added reminder dispatch endpoint `POST /api/v1/appointments/reminders/dispatch` to `src/app/routers/appointments.py` with Admin-only RBAC guard (uses atomic claim)
+- Added in-process reminder worker loop in `src/app/main.py` lifespan (controlled by `ENABLE_IN_PROCESS_REMINDER_WORKER` setting, uses atomic claim)
+- Wired booking confirmation dispatch in `AppointmentService.book_appointment()` via `after_commit_callbacks` (post-commit, Spec 06 §6)
+- Wired reschedule confirmation dispatch in `AppointmentService.reschedule_appointment()` via `after_commit_callbacks` with old/new times (post-commit, Spec 06 §6)
+- Updated `NotificationService` protocol: `send_reschedule_confirmation` now accepts `old_start_time` and `new_start_time` parameters
+- Updated `LoggingNotificationService` to log both old and new times
+- Added `FakeNotificationService` test helper capturing dispatched notifications with old/new times
 - Added tests:
-  - `test_booking_dispatches_confirmation_asynchronously` (service + fakes)
-  - `test_reschedule_dispatches_reschedule_confirmation` (service + fakes)
+  - `test_booking_dispatches_confirmation_asynchronously` (service + fakes, verifies post-commit dispatch)
+  - `test_booking_confirmation_not_dispatched_on_rollback` (verifies no dispatch on rollback)
+  - `test_reschedule_dispatches_reschedule_confirmation` (service + fakes, verifies old/new times)
   - `test_list_pending_reminders_selects_23_to_25h_window` (repository + DB)
   - `test_mark_reminder_sent_idempotent` (repository + DB)
   - `test_reminder_dispatch_endpoint_admin_200` (API + Admin auth)
   - `test_reminder_dispatch_endpoint_receptionist_403` (API + RBAC)
   - `test_reminder_dispatch_is_idempotent` (integration)
   - `test_reminder_dispatch_unauthenticated_401` (API auth)
-- All quality gates pass: ruff check, ruff format, mypy, pytest (147 passed)
+  - `test_reminder_dispatch_concurrent_requests_no_duplicates` (concurrent dispatch race test)
+- All quality gates pass: ruff check, ruff format, mypy, pytest (149 passed, 2 skipped)
 
 ## Review history
+
+- [Review round 1 — Changes requested](../reviews/T-012-review-1.md): duplicate reminder race, pre-commit confirmation dispatch, and missing old reschedule time.
+- **Round 2 — All issues addressed**: atomic claim via UPDATE ... RETURNING prevents duplicate reminders; confirmations use after_commit_callbacks for post-commit dispatch; reschedule confirmation includes old and new slot times.

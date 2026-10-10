@@ -72,3 +72,7 @@ Append-only history. Newest entries at the bottom.
 
 | 2026-10-09 22:38 | review | T-011 | Round 4 approved (B0/M0/m0/n0); owner confirmed Redis integration 1 passed, Ruff/format/mypy clean, full pytest 141 passed; status -> done. See work/reviews/T-011-review-4.md. |
 | 2026-10-10 04:58 | - | T-012 | status -> in-progress |
+| 2026-10-10 05:28 | - | T-012 | status -> in-review |
+| 2026-10-10 05:32 | - | T-010 | status -> done |
+| 2026-10-10 05:34 | - | T-012 | status -> changes-requested |
+| 2026-10-10 05:34 | - | T-012 | review round 1: changes-requested, 1 blocker/2 majors/0 minors/0 nits |

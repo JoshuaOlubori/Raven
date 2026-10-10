@@ -537,7 +537,7 @@ async def list_pending_reminders(
 
 async def mark_reminder_sent(
     session: AsyncSession, appointment_id: UUID, sent_at: datetime
-) -> None:
+) -> int:
     """Atomically set reminder_sent_at = sent_at for an appointment.
 
     Uses WHERE reminder_sent_at IS NULL to ensure idempotency: if the
@@ -547,13 +547,75 @@ async def mark_reminder_sent(
         session: Database session.
         appointment_id: UUID of the appointment to update.
         sent_at: Timestamp to set as reminder_sent_at (should be timezone-aware UTC).
+
+    Returns:
+        Number of rows affected (1 if reminder was claimed, 0 if already sent).
     """
     stmt = (
         update(Appointment)
         .where(Appointment.id == appointment_id, Appointment.reminder_sent_at.is_(None))
         .values(reminder_sent_at=sent_at)
     )
-    await session.execute(stmt)
+    result = await session.execute(stmt)
+    return int(result.rowcount)  # type: ignore[no-any-return,attr-defined]
+
+
+async def claim_pending_reminders(
+    session: AsyncSession,
+    window_start: datetime,
+    window_end: datetime,
+    claim_time: datetime,
+) -> list[Appointment]:
+    """Atomically claim appointments in the 23-25h window for reminder dispatch.
+
+    Uses a single UPDATE ... WHERE reminder_sent_at IS NULL RETURNING to
+    atomically claim rows before any notification is sent. This prevents
+    duplicate dispatches when multiple workers trigger simultaneously.
+
+    Args:
+        session: Database session.
+        window_start: Start of the 23-25 hour window (inclusive).
+        window_end: End of the 23-25 hour window (inclusive).
+        claim_time: Timestamp to set as reminder_sent_at (timezone-aware UTC).
+
+    Returns:
+        List of claimed appointments with patient, dentist, and service eager-loaded.
+    """
+    # Atomic claim: UPDATE with WHERE reminder_sent_at IS NULL and RETURNING
+    # This ensures only one worker can claim each appointment
+    from sqlalchemy import update
+    from sqlalchemy.orm import joinedload
+
+    # First, claim the appointments by setting reminder_sent_at
+    update_stmt = (
+        update(Appointment)
+        .where(
+            Appointment.status.in_(["SCHEDULED", "CONFIRMED"]),
+            Appointment.reminder_sent_at.is_(None),
+            Appointment.start_time >= window_start,
+            Appointment.start_time <= window_end,
+        )
+        .values(reminder_sent_at=claim_time)
+        .returning(Appointment.id)
+    )
+    update_result = await session.execute(update_stmt)
+    claimed_ids: list[UUID] = [row[0] for row in update_result.fetchall()]
+
+    if not claimed_ids:
+        return []
+
+    # Fetch the claimed appointments with eager-loaded relations
+    select_stmt = (
+        select(Appointment)
+        .where(Appointment.id.in_(claimed_ids))
+        .options(
+            joinedload(Appointment.patient),
+            joinedload(Appointment.dentist),
+            joinedload(Appointment.service),
+        )
+    )
+    select_result = await session.scalars(select_stmt)
+    return list(select_result.unique().all())
 
 
 # ---------------------------------------------------------------------------
