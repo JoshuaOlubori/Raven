@@ -1,7 +1,7 @@
 ---
 id: T-014
 title: Enforce atomic cross-worker appointment overlap prevention
-status: in-progress
+status: in-review
 mode: AFK
 blocked_by: -
 spec_refs: specs/05-appointments.md#5-concurrency, reviews/final-review.md#f-002-appointment-overlap-protection-does-not-serialize-empty-range-checks
@@ -43,5 +43,6 @@ PostgreSQL `SELECT ... FOR UPDATE` cannot lock a row that does not yet exist. Co
 - Renamed SQLite checks to state that they cover sequential conflict mapping only. Updated Spec 05 and ADR 0001 to specify the stable-row locking strategy.
 - Validation: `uv run --directory backend ruff check` passed; `uv run --directory backend ruff format --check` passed (67 files); `uv run --directory backend mypy src` passed (39 files); `uv run --directory backend pytest -q` passed (161 passed, 5 skipped). PostgreSQL integration cases were skipped because `TEST_POSTGRES_DATABASE_URL` is not configured in this environment.
 - Assumption: the approved overlap-guard spec's appointment-row `FOR UPDATE` description was incomplete for empty result sets. T-014 explicitly calls for a database-enforced or correctly serialized strategy; the implementation uses the stable dentist-row lock and updates Spec 05 accordingly.
+- Implementation commit: `794da4c`.
 
 ## Review history
