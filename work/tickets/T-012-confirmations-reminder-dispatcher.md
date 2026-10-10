@@ -1,7 +1,7 @@
 ---
 id: T-012
 title: Booking confirmations and 24h reminder dispatcher
-status: in-progress
+status: in-review
 mode: AFK
 blocked_by: T-010
 spec_refs: specs/06-notifications-events.md#2-layer-1, specs/06-notifications-events.md#3-layer-2, specs/06-notifications-events.md#4-layer-3, specs/06-notifications-events.md#6-layer-5
@@ -75,6 +75,7 @@ Follow ADR 0002 dual-mode execution strategy: the maintenance endpoint supports 
   - Added coverage for `CONFIRMED` reminders, actual endpoint delivery and persistence, provider failure/retry, and deferred callback execution.
   - Added `.codex/` to `.gitignore` and removed its config from the Git index while preserving the local file.
   - Kept SSE event callbacks on the post-commit path; only patient notifications are deferred until after the response.
+- Implementation commit: `89530af` (`T-012: Make reminder failures retryable and defer confirmations`).
 - Round 2 validation: Ruff check passed; Ruff format check passed for source/tests when excluding generated `work/TRACKER.md`; mypy passed; pytest 151 passed, 2 skipped. The unfiltered format command still reports an invalid UTF-8 stream for the generated tracker.
 
 ## Review history
