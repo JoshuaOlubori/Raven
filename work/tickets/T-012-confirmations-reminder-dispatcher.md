@@ -1,7 +1,7 @@
 ---
 id: T-012
 title: Booking confirmations and 24h reminder dispatcher
-status: changes-requested
+status: in-review
 mode: AFK
 blocked_by: T-010
 spec_refs: specs/06-notifications-events.md#2-layer-1, specs/06-notifications-events.md#3-layer-2, specs/06-notifications-events.md#4-layer-3, specs/06-notifications-events.md#6-layer-5
