@@ -13,6 +13,8 @@ from zoneinfo import ZoneInfo
 import pytest
 from httpx import AsyncClient
 
+from app.api.deps import get_notification_service_dep
+from app.main import app
 from app.models.service import DentalService
 from app.models.staff import Staff
 
@@ -1394,13 +1396,41 @@ async def reminder_test_setup(
         }
 
 
+class ReminderNotificationFake:
+    def __init__(self, fail_once: bool = False) -> None:
+        self.fail_once = fail_once
+        self.reminders: list[UUID] = []
+
+    async def send_booking_confirmation(self, appointment) -> None:
+        return None
+
+    async def send_reschedule_confirmation(
+        self, appointment, old_start_time, new_start_time
+    ) -> None:
+        return None
+
+    async def send_reminder(self, appointment) -> None:
+        self.reminders.append(appointment.id)
+        if self.fail_once:
+            self.fail_once = False
+            raise RuntimeError("provider unavailable")
+
+
 async def test_reminder_dispatch_endpoint_admin_200(
     reminder_test_setup: dict,
     client: AsyncClient,
+    test_session_local,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """T-012 AC5: Admin can call POST /reminders/dispatch → 200 with dispatchedCount."""
     setup = reminder_test_setup
     admin_headers = setup["admin_headers"]
+    notifications = ReminderNotificationFake()
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_notification_service_dep,
+        lambda: notifications,
+    )
 
     response = await client.post(
         "/api/v1/appointments/reminders/dispatch",
@@ -1413,6 +1443,55 @@ async def test_reminder_dispatch_endpoint_admin_200(
     assert body["dispatchedCount"] == 1  # Only the 24h SCHEDULED appt with no reminder
     assert "checkedWindowStart" in body
     assert "checkedWindowEnd" in body
+    assert notifications.reminders == [setup["appt_24h"].id]
+
+    from app.models.appointment import Appointment
+
+    async with test_session_local() as session:
+        refreshed = await session.get(Appointment, setup["appt_24h"].id)
+        assert refreshed is not None
+        assert refreshed.reminder_sent_at is not None
+
+
+async def test_failed_reminder_delivery_can_be_retried(
+    reminder_test_setup: dict,
+    client: AsyncClient,
+    test_session_local,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    setup = reminder_test_setup
+    notifications = ReminderNotificationFake(fail_once=True)
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_notification_service_dep,
+        lambda: notifications,
+    )
+    headers = setup["admin_headers"]
+
+    first = await client.post(
+        "/api/v1/appointments/reminders/dispatch", headers=headers
+    )
+    assert first.status_code == 200
+    assert first.json()["dispatchedCount"] == 0
+
+    from app.models.appointment import Appointment
+
+    async with test_session_local() as session:
+        failed_attempt = await session.get(Appointment, setup["appt_24h"].id)
+        assert failed_attempt is not None
+        assert failed_attempt.reminder_sent_at is None
+
+    second = await client.post(
+        "/api/v1/appointments/reminders/dispatch", headers=headers
+    )
+    assert second.status_code == 200
+    assert second.json()["dispatchedCount"] == 1
+    assert notifications.reminders == [setup["appt_24h"].id] * 2
+
+    async with test_session_local() as session:
+        delivered = await session.get(Appointment, setup["appt_24h"].id)
+        assert delivered is not None
+        assert delivered.reminder_sent_at is not None
 
 
 async def test_reminder_dispatch_endpoint_receptionist_403(
@@ -1458,7 +1537,9 @@ async def test_reminder_dispatch_is_idempotent(
 
     async with test_session_local() as session:
         refreshed = await session.get(Appointment, appt_24h.id)
+        assert refreshed is not None
         first_sent_at = refreshed.reminder_sent_at
+        assert first_sent_at is not None
 
     # Second dispatch (should be idempotent)
     response2 = await client.post(

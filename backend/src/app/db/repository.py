@@ -560,6 +560,41 @@ async def mark_reminder_sent(
     return int(result.rowcount)  # type: ignore[no-any-return,attr-defined]
 
 
+async def complete_reminder_claim(
+    session: AsyncSession,
+    appointment_id: UUID,
+    claim_time: datetime,
+    sent_at: datetime,
+) -> int:
+    """Replace a claim timestamp with the actual successful delivery time."""
+    stmt = (
+        update(Appointment)
+        .where(
+            Appointment.id == appointment_id,
+            Appointment.reminder_sent_at == claim_time,
+        )
+        .values(reminder_sent_at=sent_at)
+    )
+    result = await session.execute(stmt)
+    return int(result.rowcount)  # type: ignore[no-any-return,attr-defined]
+
+
+async def release_reminder_claim(
+    session: AsyncSession, appointment_id: UUID, claim_time: datetime
+) -> int:
+    """Clear a failed reminder claim so a later dispatcher can retry it."""
+    stmt = (
+        update(Appointment)
+        .where(
+            Appointment.id == appointment_id,
+            Appointment.reminder_sent_at == claim_time,
+        )
+        .values(reminder_sent_at=None)
+    )
+    result = await session.execute(stmt)
+    return int(result.rowcount)  # type: ignore[no-any-return,attr-defined]
+
+
 async def claim_pending_reminders(
     session: AsyncSession,
     window_start: datetime,
@@ -583,9 +618,6 @@ async def claim_pending_reminders(
     """
     # Atomic claim: UPDATE with WHERE reminder_sent_at IS NULL and RETURNING
     # This ensures only one worker can claim each appointment
-    from sqlalchemy import update
-    from sqlalchemy.orm import joinedload
-
     # First, claim the appointments by setting reminder_sent_at
     update_stmt = (
         update(Appointment)

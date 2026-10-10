@@ -1,7 +1,7 @@
 ---
 id: T-012
 title: Booking confirmations and 24h reminder dispatcher
-status: in-review
+status: in-progress
 mode: AFK
 blocked_by: T-010
 spec_refs: specs/06-notifications-events.md#2-layer-1, specs/06-notifications-events.md#3-layer-2, specs/06-notifications-events.md#4-layer-3, specs/06-notifications-events.md#6-layer-5
@@ -37,6 +37,8 @@ Patients automatically receive booking/reschedule confirmation messages (via plu
 | 3 | `test_reminder_query_selects_appointments_in_23_to_25h_window` | Repository + DB | 24h appointment included; 22h and 26h appointments excluded | PRD R-17 |
 | 4 | `test_reminder_dispatch_is_idempotent` | Integration | second execution dispatches 0 reminders; reminder_sent_at unchanged | ADR 0002 |
 | 5 | `test_reminder_maintenance_endpoint_admin_guard` | API + Admin auth | status 200, dispatchedCount >= 1; 403 for receptionist | Spec 06 §4 |
+| 6 | `test_failed_reminder_delivery_can_be_retried` | API + notification fake | failed attempt leaves reminder pending; later success stamps delivery | PRD R-17 |
+| 7 | `test_post_commit_callbacks_run_after_successful_commit` | DB dependency + BackgroundTasks | callback is queued after commit and runs after response work | PRD R-16, Spec 06 §6 |
 
 ## Out of scope
 Third-party Twilio/SendGrid production accounts (v1 uses `LoggingNotificationService` adapter).
@@ -49,8 +51,8 @@ Follow ADR 0002 dual-mode execution strategy: the maintenance endpoint supports 
 - Added `list_pending_reminders`, `mark_reminder_sent`, and `claim_pending_reminders` repository functions to `src/app/db/repository.py` with atomic claim via UPDATE ... WHERE reminder_sent_at IS NULL RETURNING
 - Added reminder dispatch endpoint `POST /api/v1/appointments/reminders/dispatch` to `src/app/routers/appointments.py` with Admin-only RBAC guard (uses atomic claim)
 - Added in-process reminder worker loop in `src/app/main.py` lifespan (controlled by `ENABLE_IN_PROCESS_REMINDER_WORKER` setting, uses atomic claim)
-- Wired booking confirmation dispatch in `AppointmentService.book_appointment()` via `after_commit_callbacks` (post-commit, Spec 06 §6)
-- Wired reschedule confirmation dispatch in `AppointmentService.reschedule_appointment()` via `after_commit_callbacks` with old/new times (post-commit, Spec 06 §6)
+- Wired booking confirmation dispatch in `AppointmentService.book_appointment()` via post-response background tasks after a successful commit (Spec 06 §6)
+- Wired reschedule confirmation dispatch in `AppointmentService.reschedule_appointment()` via post-response background tasks, preserving old/new times (Spec 06 §6)
 - Updated `NotificationService` protocol: `send_reschedule_confirmation` now accepts `old_start_time` and `new_start_time` parameters
 - Updated `LoggingNotificationService` to log both old and new times
 - Added `FakeNotificationService` test helper capturing dispatched notifications with old/new times
@@ -65,9 +67,19 @@ Follow ADR 0002 dual-mode execution strategy: the maintenance endpoint supports 
   - `test_reminder_dispatch_is_idempotent` (integration)
   - `test_reminder_dispatch_unauthenticated_401` (API auth)
   - `test_reminder_dispatch_concurrent_requests_no_duplicates` (concurrent dispatch race test)
-- All quality gates pass: ruff check, ruff format, mypy, pytest (149 passed, 2 skipped)
+- Initial implementation gates: Ruff check, formatting, and mypy passed; pytest 149 passed, 2 skipped.
+- Review round 2 fixes:
+  - Added `ReminderDispatcher` service shared by the HTTP endpoint and lifespan worker.
+  - Kept atomic claims uncommitted until delivery; successful sends receive a delivery timestamp, failed sends release the claim so a later run can retry.
+  - Registered post-commit callbacks as FastAPI `BackgroundTasks`, so confirmation and event work runs after the response instead of delaying it.
+  - Added coverage for `CONFIRMED` reminders, actual endpoint delivery and persistence, provider failure/retry, and deferred callback execution.
+  - Added `.codex/` to `.gitignore` and removed its config from the Git index while preserving the local file.
+  - Kept SSE event callbacks on the post-commit path; only patient notifications are deferred until after the response.
+- Round 2 validation: Ruff check passed; Ruff format check passed for source/tests when excluding generated `work/TRACKER.md`; mypy passed; pytest 151 passed, 2 skipped. The unfiltered format command still reports an invalid UTF-8 stream for the generated tracker.
 
 ## Review history
 
 - [Review round 1 — Changes requested](../reviews/T-012-review-1.md): duplicate reminder race, pre-commit confirmation dispatch, and missing old reschedule time.
-- **Round 2 — All issues addressed**: atomic claim via UPDATE ... RETURNING prevents duplicate reminders; confirmations use after_commit_callbacks for post-commit dispatch; reschedule confirmation includes old and new slot times.
+- **Implementation follow-up after round 1**: atomic claim via UPDATE ... RETURNING prevents duplicate reminders; confirmations use after_commit_callbacks for post-commit dispatch; reschedule confirmation includes old and new slot times.
+- [Review round 2 — Changes requested](../reviews/T-012-review-2.md): failed reminder deliveries are committed as sent; confirmation delivery still blocks the response; credential is committed in `.codex/config.toml`; missing CONFIRMED-status and delivery-persistence assertions.
+- **Implementation follow-up after round 2**: shared dispatcher releases failed claims and stamps only successful deliveries; confirmation notifications run as response background tasks; endpoint and worker use the same dispatcher; tests cover `CONFIRMED`, delivery persistence, retry after provider failure, and callback timing.

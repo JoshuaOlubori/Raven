@@ -16,6 +16,7 @@ import contextlib
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
+from starlette.background import BackgroundTasks
 
 from app.api.deps import get_db_session
 
@@ -25,7 +26,7 @@ async def test_db_session_lifecycle_commits_and_closes(
     override_dbsession: None,  # patches SessionLocal to the test engine
 ) -> None:
     # --- success path: commit happens, session is closed ---
-    gen = get_db_session()
+    gen = get_db_session(BackgroundTasks())
     session = await gen.asend(None)
     assert session.is_active
 
@@ -46,7 +47,7 @@ async def test_db_session_lifecycle_commits_and_closes(
     assert "committed-row" in vals
 
     # --- exception path: rollback happens, session is closed ---
-    gen2 = get_db_session()
+    gen2 = get_db_session(BackgroundTasks())
     session2 = await gen2.asend(None)
     assert session2.is_active
 

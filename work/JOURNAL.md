@@ -76,3 +76,6 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-10 05:32 | - | T-010 | status -> done |
 | 2026-10-10 05:34 | - | T-012 | status -> changes-requested |
 | 2026-10-10 05:34 | - | T-012 | review round 1: changes-requested, 1 blocker/2 majors/0 minors/0 nits |
+| 2026-10-10 06:02 | - | T-012 | status -> changes-requested |
+| 2026-10-10 06:03 | - | T-012 | review round 2: changes-requested, 2 blockers/4 majors/1 minor/0 nits; see work/reviews/T-012-review-2.md |
+| 2026-10-10 06:05 | - | T-012 | status -> in-progress |

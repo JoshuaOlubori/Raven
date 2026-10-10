@@ -404,6 +404,16 @@ async def test_list_pending_reminders_selects_23_to_25h_window(
             status="SCHEDULED",
         )
 
+        appt_24h_confirmed = await create_appointment(
+            session,
+            patient_id=repo_patient.id,
+            dentist_id=repo_dentist.id,
+            service_id=repo_service.id,
+            start_time=base_time + timedelta(hours=24, minutes=10),
+            end_time=base_time + timedelta(hours=24, minutes=55),
+            status="CONFIRMED",
+        )
+
         # 22h in the future (outside window - too soon) - SHOULD BE EXCLUDED
         _appt_22h = await create_appointment(
             session,
@@ -458,17 +468,21 @@ async def test_list_pending_reminders_selects_23_to_25h_window(
 
         pending = await list_pending_reminders(session, window_start, window_end)
 
-        # Only the 24h SCHEDULED appointment with
-        # reminder_sent_at NULL should be returned
-        assert len(pending) == 1
-        assert pending[0].id == appt_24h.id
-        assert pending[0].reminder_sent_at is None
-        assert pending[0].status == "SCHEDULED"
+        # Eligible SCHEDULED and CONFIRMED appointments are returned.
+        assert {item.id for item in pending} == {
+            appt_24h.id,
+            appt_24h_confirmed.id,
+        }
+        scheduled = next(item for item in pending if item.id == appt_24h.id)
+        confirmed = next(item for item in pending if item.id == appt_24h_confirmed.id)
+        assert scheduled.reminder_sent_at is None
+        assert scheduled.status == "SCHEDULED"
+        assert confirmed.status == "CONFIRMED"
 
         # Verify eager-loaded relations
-        assert pending[0].patient is not None
-        assert pending[0].dentist is not None
-        assert pending[0].service is not None
+        assert scheduled.patient is not None
+        assert scheduled.dentist is not None
+        assert scheduled.service is not None
 
 
 async def test_mark_reminder_sent_idempotent(

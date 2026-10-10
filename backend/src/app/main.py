@@ -18,7 +18,6 @@ from fastapi import FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
 from app.config import get_settings
-from app.db.repository import claim_pending_reminders
 from app.db.session import SessionLocal, init_db
 from app.exceptions import DomainError
 from app.models.appointment import (  # noqa: F401 — register table on Base.metadata
@@ -47,6 +46,7 @@ from app.services.notification_service import (
     NotificationService,
     get_notification_service,
 )
+from app.services.reminder_dispatcher import ReminderDispatcher
 
 logger = logging.getLogger("app")
 
@@ -76,28 +76,9 @@ async def _reminder_worker_loop() -> None:
 
 async def _dispatch_reminders_once(notification_service: NotificationService) -> None:
     """Execute a single reminder dispatch cycle."""
-    from datetime import datetime, timedelta
-    from zoneinfo import ZoneInfo
-
-    now_utc = datetime.now(ZoneInfo("UTC"))
-    now_naive = now_utc.replace(tzinfo=None)
-    window_start = now_naive + timedelta(hours=23)
-    window_end = now_naive + timedelta(hours=25)
-
     async with SessionLocal() as session:
-        # Atomically claim pending reminders (sets reminder_sent_at) and fetch them
-        claimed_appointments = await claim_pending_reminders(
-            session, window_start, window_end, now_utc
-        )
-
-        for appointment in claimed_appointments:
-            try:
-                await notification_service.send_reminder(appointment)
-            except Exception:
-                logger.exception(
-                    "Failed to dispatch reminder for appointment %s", appointment.id
-                )
-
+        dispatcher = ReminderDispatcher(session, notification_service)
+        await dispatcher.dispatch()
         await session.commit()
 
 

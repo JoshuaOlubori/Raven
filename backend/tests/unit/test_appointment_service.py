@@ -722,7 +722,7 @@ async def test_booking_dispatches_confirmation_asynchronously(
 
     # Commit the session and run after_commit_callbacks (mimics get_db_session)
     await appointment_service._session.commit()
-    callbacks = appointment_service._session.info.pop("after_commit_callbacks", [])
+    callbacks = appointment_service._session.info.pop("after_response_callbacks", [])
     for callback in callbacks:
         await callback()
 
@@ -765,7 +765,7 @@ async def test_booking_confirmation_not_dispatched_on_rollback(
     )
     # Commit and run callbacks for first booking
     await appointment_service._session.commit()
-    callbacks = appointment_service._session.info.pop("after_commit_callbacks", [])
+    callbacks = appointment_service._session.info.pop("after_response_callbacks", [])
     for callback in callbacks:
         await callback()
 
@@ -813,7 +813,7 @@ async def test_reschedule_dispatches_reschedule_confirmation(
     )
     # Commit and run callbacks for the booking
     await appointment_service._session.commit()
-    callbacks = appointment_service._session.info.pop("after_commit_callbacks", [])
+    callbacks = appointment_service._session.info.pop("after_response_callbacks", [])
     for callback in callbacks:
         await callback()
 
@@ -837,7 +837,7 @@ async def test_reschedule_dispatches_reschedule_confirmation(
 
     # Commit the session and run after_commit_callbacks
     await appointment_service._session.commit()
-    callbacks = appointment_service._session.info.pop("after_commit_callbacks", [])
+    callbacks = appointment_service._session.info.pop("after_response_callbacks", [])
     for callback in callbacks:
         await callback()
 

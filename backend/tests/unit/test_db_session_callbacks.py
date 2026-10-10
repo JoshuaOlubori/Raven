@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import pytest
+from starlette.background import BackgroundTasks
 
 from app.api import deps
 
@@ -40,7 +41,7 @@ async def test_post_commit_callbacks_run_after_successful_commit(
     async def publish() -> None:
         published.append(True)
 
-    generator = deps.get_db_session()
+    generator = deps.get_db_session(BackgroundTasks())
     yielded_session = await anext(generator)
     assert yielded_session is session
     callbacks: list[Callable[[], Awaitable[None]]] = yielded_session.info.setdefault(
@@ -52,6 +53,33 @@ async def test_post_commit_callbacks_run_after_successful_commit(
         await anext(generator)
 
     assert published == [True]
+
+
+async def test_post_response_callbacks_are_deferred_to_background_tasks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = FakeSession()
+    monkeypatch.setattr(deps, "SessionLocal", lambda: session)
+    background_tasks = BackgroundTasks()
+    published: list[bool] = []
+
+    async def publish() -> None:
+        published.append(True)
+
+    generator = deps.get_db_session(background_tasks)
+    yielded_session = await anext(generator)
+    callbacks: list[Callable[[], Awaitable[None]]] = yielded_session.info.setdefault(
+        "after_response_callbacks", []
+    )
+    callbacks.append(publish)
+
+    with pytest.raises(StopAsyncIteration):
+        await anext(generator)
+
+    assert published == []
+    assert len(background_tasks.tasks) == 1
+    await background_tasks()
+    assert published == [True]
     assert session.closed is True
     assert session.rolled_back is False
 
@@ -61,12 +89,13 @@ async def test_post_commit_callbacks_do_not_run_when_commit_fails(
 ) -> None:
     session = FakeSession(fail_commit=True)
     monkeypatch.setattr(deps, "SessionLocal", lambda: session)
+    background_tasks = BackgroundTasks()
     published: list[bool] = []
 
     async def publish() -> None:
         published.append(True)
 
-    generator = deps.get_db_session()
+    generator = deps.get_db_session(background_tasks)
     yielded_session = await anext(generator)
     callbacks: list[Callable[[], Awaitable[None]]] = yielded_session.info.setdefault(
         "after_commit_callbacks", []
@@ -77,5 +106,6 @@ async def test_post_commit_callbacks_do_not_run_when_commit_fails(
         await anext(generator)
 
     assert published == []
+    assert background_tasks.tasks == []
     assert session.rolled_back is True
     assert session.closed is True

@@ -12,7 +12,7 @@ import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import BackgroundTasks, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
@@ -29,6 +29,7 @@ from app.services.notification_service import (
     get_notification_service,
 )
 from app.services.patient_service import PatientService
+from app.services.reminder_dispatcher import ReminderDispatcher
 from app.services.schedule_service import ScheduleService
 from app.services.service_catalog import ServiceCatalog
 
@@ -37,8 +38,10 @@ from app.services.service_catalog import ServiceCatalog
 # ---------------------------------------------------------------------------
 
 
-async def get_db_session() -> AsyncGenerator[AsyncSession]:
-    """Commit the request transaction, then run callbacks registered by services."""
+async def get_db_session(
+    background_tasks: BackgroundTasks,
+) -> AsyncGenerator[AsyncSession]:
+    """Commit the request and defer registered callbacks until after its response."""
     session = SessionLocal()
     try:
         yield session
@@ -53,6 +56,12 @@ async def get_db_session() -> AsyncGenerator[AsyncSession]:
                 logging.getLogger("app.db_session").exception(
                     "Post-commit callback failed"
                 )
+
+        response_callbacks: list[Callable[[], Awaitable[None]]] = session.info.pop(
+            "after_response_callbacks", []
+        )
+        for callback in response_callbacks:
+            background_tasks.add_task(callback)
     except Exception:
         await session.rollback()
         raise
@@ -199,3 +208,14 @@ def get_notification_service_dep() -> NotificationService:
 NotificationServiceDep = Annotated[
     NotificationService, Depends(get_notification_service_dep)
 ]
+
+
+def get_reminder_dispatcher(
+    session: DbSessionDep,
+    notification_service: NotificationServiceDep,
+) -> ReminderDispatcher:
+    """Construct the reminder dispatcher with request-scoped dependencies."""
+    return ReminderDispatcher(session, notification_service)
+
+
+ReminderDispatcherDep = Annotated[ReminderDispatcher, Depends(get_reminder_dispatcher)]

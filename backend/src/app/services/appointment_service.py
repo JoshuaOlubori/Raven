@@ -222,7 +222,7 @@ class AppointmentService:
                     appointment.id,
                 )
 
-        callbacks = self._session.info.setdefault("after_commit_callbacks", [])
+        callbacks = self._session.info.setdefault("after_response_callbacks", [])
         callbacks.append(send_booking_confirmation_after_commit)
 
         return appointment
@@ -388,7 +388,7 @@ class AppointmentService:
                     appointment.id,
                 )
 
-        callbacks = self._session.info.setdefault("after_commit_callbacks", [])
+        callbacks = self._session.info.setdefault("after_response_callbacks", [])
         callbacks.append(send_reschedule_confirmation_after_commit)
 
         return appointment
