@@ -1,7 +1,7 @@
 """Application bootstrap.
 
-Thin wiring only (Standard §2): lifespan-managed DB initialization,
-correlation-ID propagation middleware, structured logging on unhandled
+Thin wiring only (Standard §2): app lifespan, correlation-ID propagation
+middleware, structured logging on unhandled
 errors, the standardized error handlers (Architecture §4), and router
 mounting.  No business logic lives here.
 

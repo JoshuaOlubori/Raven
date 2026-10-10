@@ -16,10 +16,10 @@ The backend can create and evolve production databases through versioned, revers
 Add the async Alembic configuration, environment and initial revision for all current models. Update application startup so it does not use `Base.metadata.create_all()` against the production database. Keep test schema setup explicit and test-only.
 
 ## Acceptance criteria
-- [ ] Given an empty supported database, When all migrations are upgraded, Then every current model table and index exists.
-- [ ] Given the initial revision is applied, When it is downgraded and upgraded again, Then both operations succeed and the schema is restored.
-- [ ] Given a production app startup, When the lifespan initializes, Then it does not create or mutate the schema outside Alembic.
-- [ ] Alembic can load application metadata and generate/check revisions without import errors.
+- [x] Given an empty supported database, When all migrations are upgraded, Then every current model table and index exists.
+- [x] Given the initial revision is applied, When it is downgraded and upgraded again, Then both operations succeed and the schema is restored.
+- [x] Given a production app startup, When the lifespan initializes, Then it does not create or mutate the schema outside Alembic.
+- [x] Alembic can load application metadata and generate/check revisions without import errors.
 
 ## Test plan
 | # | Test name | Seam | Asserts | Expected value comes from |
@@ -58,4 +58,14 @@ Commands run:
 - uv run ruff format --check
 - uv run mypy src
 
+### Review round 1 fixes
+
+- Added the previously untracked `backend/alembic.ini` to the ticket changes so clean checkouts can run Alembic.
+- Replaced integer boolean server defaults with `sa.true()`; a PostgreSQL offline SQL regression test verifies boolean literals are emitted.
+- Replaced the lifespan placeholder with a test that enters the actual app lifespan and fails if `Base.metadata.create_all` is invoked.
+- Updated database session documentation to identify `init_db()` as explicit test/setup-only behavior.
+- Validation: `uv run --directory backend ruff check` passed; `uv run --directory backend mypy src` passed; `uv run --directory backend pytest -q` passed (161 passed, 2 skipped). `ruff format --check` reports that `work/TRACKER.md` cannot be decoded as UTF-8 (also reported by review round 1); changed Python files were formatted and no Python formatting issues remain.
+- Commit: pending.
+
 ## Review history
+1. [Round 1 changes requested](../reviews/T-013-review-1.md) — 2 blockers, 1 major.

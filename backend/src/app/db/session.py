@@ -4,9 +4,8 @@ A single app-scoped async engine is created from ``settings.database_url``.
 The ``SessionLocal`` sessionmaker uses ``expire_on_commit=False`` so that
 domain objects remain usable after a transaction commits (Standard §4).
 
-``init_db`` creates all tables registered on ``Base`` and is invoked from the
-application lifespan.  An optional ``engine`` argument allows callers
-(tests, tooling) to target a different engine.
+``init_db`` is an explicit test/setup helper that creates all tables registered
+on ``Base``. Production schema changes are managed by Alembic migrations.
 """
 
 from __future__ import annotations
@@ -31,10 +30,9 @@ SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
 
 
 async def init_db(target_engine: AsyncEngine | None = None) -> None:
-    """Create all declared tables.
+    """Create all declared tables for explicit test/setup use.
 
-    Defaults to the module-level engine; pass an explicit engine (e.g. an
-    in-memory test engine) to target a different connection.
+    Production deployments must use Alembic for schema changes.
     """
     target: AsyncEngine = target_engine if target_engine is not None else engine
     async with target.begin() as conn:

@@ -260,38 +260,48 @@ class TestAlembicMigrations:
         assert match.group(1) == head_revision, "Revision mismatch after re-upgrade"
 
     @pytest.mark.asyncio
-    async def test_lifespan_does_not_create_production_schema(self) -> None:
-        """Test that application lifespan does not call create_all against
-        production database.
-        """
-        # This test verifies that the production startup path does not use
-        # Base.metadata.create_all(). The test checks that:
-        # 1. The lifespan uses alembic for schema management
-        # 2. create_all is only called in test scenarios
+    async def test_lifespan_does_not_create_production_schema(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Starting the real application lifespan never invokes create_all."""
+        from app import main
+        from app.config import Settings
+        from app.models import Base
 
-        # Import the actual init_db function and main module
+        class FakeBroadcaster:
+            async def start(self, redis_url: str) -> None:
+                pass
 
-        # Create a fresh engine
-        test_engine = create_async_engine(
-            "sqlite+aiosqlite:///:memory:",
-            connect_args={"check_same_thread": False},
+            async def stop(self) -> None:
+                pass
+
+        def fail_create_all(*args: object, **kwargs: object) -> None:
+            raise AssertionError("application startup attempted to create schema")
+
+        monkeypatch.setattr(main, "get_event_broadcaster", lambda: FakeBroadcaster())
+        monkeypatch.setattr(
+            main,
+            "get_settings",
+            lambda: Settings(ENABLE_IN_PROCESS_REMINDER_WORKER=False),
+        )
+        monkeypatch.setattr(Base.metadata, "create_all", fail_create_all)
+
+        async with main.lifespan(main.app):
+            pass
+
+    def test_postgresql_migration_uses_boolean_defaults(
+        self, alembic_config_path: Path
+    ) -> None:
+        """PostgreSQL offline migration SQL must use boolean literals."""
+        result = run_alembic_command(
+            ["upgrade", "head", "--sql"],
+            cwd=alembic_config_path.parent,
+            env=get_alembic_env("postgresql+asyncpg://user:pass@localhost/db"),
         )
 
-        # The test ensures that init_db is not called during normal app startup
-        # when using production database URL. We verify this by checking that
-        # the lifespan doesn't call create_all on the production engine.
-
-        # In tests, init_db IS called explicitly via conftest.py (line 107)
-        # but in production, the lifespan should use migrations instead
-
-        # Verify the current main.py lifespan doesn't call init_db on the
-        # module-level engine - it should only initialize alembic or check migrations
-
-        # For now, this test documents the expected behavior. The actual
-        # implementation will change main.py lifespan to not call init_db()
-        # against the production engine.
-
-        await test_engine.dispose()
+        assert result.returncode == 0, result.stderr
+        assert "DEFAULT true" in result.stdout
+        assert "BOOLEAN DEFAULT 1" not in result.stdout
 
 
 class TestAlembicConfig:
