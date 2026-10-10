@@ -1,7 +1,7 @@
 ---
 id: T-013
 title: Add reversible Alembic migrations for production schema changes
-status: in-progress
+status: in-review
 mode: AFK
 blocked_by: -
 spec_refs: specs/00-architecture.md#4-cross-cutting-design, reviews/final-review.md#f-001-production-schema-lifecycle-has-no-migrations
@@ -65,7 +65,24 @@ Commands run:
 - Replaced the lifespan placeholder with a test that enters the actual app lifespan and fails if `Base.metadata.create_all` is invoked.
 - Updated database session documentation to identify `init_db()` as explicit test/setup-only behavior.
 - Validation: `uv run --directory backend ruff check` passed; `uv run --directory backend mypy src` passed; `uv run --directory backend pytest -q` passed (161 passed, 2 skipped). `ruff format --check` reports that `work/TRACKER.md` cannot be decoded as UTF-8 (also reported by review round 1); changed Python files were formatted and no Python formatting issues remain.
-- Commit: pending.
+- Commit: `2a3ba0b` (`T-013: fix PostgreSQL migration defaults and startup test`).
 
 ## Review history
 1. [Round 1 changes requested](../reviews/T-013-review-1.md) — 2 blockers, 1 major.
+2. [Round 2 changes requested](../reviews/T-013-review-2.md) — 1 blocker (repository-wide format gate blocked by invalid UTF-8 in `work/TRACKER.md`).
+3. [Round 3 changes requested](../reviews/T-013-review-3.md) — 2 majors (migration/metadata drift and incomplete checks).
+
+### Review round 3 fixes
+
+- Aligned the initial revision with model metadata: removed unique constraints duplicated by unique indexes, client-side defaults incorrectly persisted as server defaults, and constraint names absent from metadata.
+- Replaced the hand-picked index assertions with full index and unique-constraint comparisons against `Base.metadata`; added Alembic's `check` command after a fresh upgrade to detect drift in types and defaults too.
+- Reused the complete schema assertion after downgrade/upgrade and made the temporary SQLite database fixture remove its file during teardown.
+- Validation: migration integration suite passed (9 passed); backend Ruff check and format check passed; backend mypy passed (39 source files); full backend pytest passed (161 passed, 2 skipped).
+- Commit: `039e827` (`T-013: align Alembic migration with model metadata`).
+
+### Review round 2 format-gate fix
+
+- Re-encoded the ignored generated file `backend/work/TRACKER.md` from Windows-1252 to UTF-8. The malformed file was under the backend working directory and Ruff read it during the repository format gate; the root tracker was already valid UTF-8.
+- Validation: `backend/.venv/Scripts/ruff.exe format --check` passed (66 files already formatted); `backend/.venv/Scripts/ruff.exe check` passed. Mypy and pytest had passed on unchanged implementation commit `2a3ba0b` in the review run; rerunning them in this session is blocked because the configured virtualenv Python executable cannot be launched by the environment.
+- No production or test source changes were needed for this review finding.
+- Commit: `b732a34` (`T-013: fix backend tracker encoding`).

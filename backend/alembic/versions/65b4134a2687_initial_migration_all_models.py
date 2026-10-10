@@ -27,21 +27,18 @@ def upgrade() -> None:
         sa.Column("hashed_password", sa.String(), nullable=False),
         sa.Column("full_name", sa.String(), nullable=False),
         sa.Column("role", sa.String(), nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
-        sa.PrimaryKeyConstraint("id", name="pk_staff"),
-        sa.UniqueConstraint("email", name="uq_staff_email"),
+        sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_staff_email", "staff", ["email"], unique=True)
     op.create_index("ix_staff_role", "staff", ["role"], unique=False)
@@ -53,21 +50,18 @@ def upgrade() -> None:
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("description", sa.String(), nullable=True),
         sa.Column("duration_minutes", sa.Integer(), nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
-        sa.PrimaryKeyConstraint("id", name="pk_dental_services"),
-        sa.UniqueConstraint("name", name="uq_dental_services_name"),
+        sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_dental_services_name", "dental_services", ["name"], unique=True)
     op.create_index(
@@ -86,20 +80,18 @@ def upgrade() -> None:
         sa.Column("emergency_contact_name", sa.String(), nullable=True),
         sa.Column("emergency_contact_phone", sa.String(), nullable=True),
         sa.Column("medical_alerts", sa.String(), nullable=True),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
-        sa.PrimaryKeyConstraint("id", name="pk_patients"),
+        sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
         "ix_patients_last_first", "patients", ["last_name", "first_name"], unique=False
@@ -115,12 +107,11 @@ def upgrade() -> None:
         sa.Column("day_of_week", sa.Integer(), nullable=False),
         sa.Column("start_time", sa.Time(), nullable=False),
         sa.Column("end_time", sa.Time(), nullable=False),
-        sa.PrimaryKeyConstraint("id", name="pk_working_shifts"),
+        sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(
             ["dentist_id"],
             ["staff.id"],
             ondelete="CASCADE",
-            name="fk_working_shifts_dentist_id_staff",
         ),
         sa.UniqueConstraint(
             "dentist_id", "day_of_week", "start_time", name="uq_dentist_day_start"
@@ -142,20 +133,17 @@ def upgrade() -> None:
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
-        sa.PrimaryKeyConstraint("id", name="pk_time_off_blocks"),
+        sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(
             ["dentist_id"],
             ["staff.id"],
             ondelete="CASCADE",
-            name="fk_time_off_blocks_dentist_id_staff",
         ),
     )
     op.create_index(
@@ -183,39 +171,34 @@ def upgrade() -> None:
         sa.Column("service_id", sa.Uuid(), nullable=False),
         sa.Column("start_time", sa.DateTime(timezone=True), nullable=False),
         sa.Column("end_time", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("status", sa.String(), nullable=False, server_default="SCHEDULED"),
+        sa.Column("status", sa.String(), nullable=False),
         sa.Column("cancellation_reason", sa.String(), nullable=True),
         sa.Column("reminder_sent_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
-        sa.PrimaryKeyConstraint("id", name="pk_appointments"),
+        sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(
             ["patient_id"],
             ["patients.id"],
             ondelete="CASCADE",
-            name="fk_appointments_patient_id_patients",
         ),
         sa.ForeignKeyConstraint(
             ["dentist_id"],
             ["staff.id"],
             ondelete="CASCADE",
-            name="fk_appointments_dentist_id_staff",
         ),
         sa.ForeignKeyConstraint(
             ["service_id"],
             ["dental_services.id"],
             ondelete="CASCADE",
-            name="fk_appointments_service_id_dental_services",
         ),
     )
     op.create_index(
@@ -262,18 +245,14 @@ def upgrade() -> None:
             "created_at",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
-        sa.PrimaryKeyConstraint("id", name="pk_appointment_audit_logs"),
+        sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(
             ["appointment_id"],
             ["appointments.id"],
             ondelete="CASCADE",
-            name="fk_appointment_audit_logs_appointment_id_appointments",
         ),
-        sa.ForeignKeyConstraint(
-            ["actor_id"], ["staff.id"], name="fk_appointment_audit_logs_actor_id_staff"
-        ),
+        sa.ForeignKeyConstraint(["actor_id"], ["staff.id"]),
     )
     op.create_index(
         "ix_appointment_audit_logs_appointment_id",

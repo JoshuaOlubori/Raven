@@ -13,12 +13,11 @@ import re
 import subprocess
 import sys
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from sqlalchemy import inspect
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from sqlalchemy.pool import StaticPool
+from sqlalchemy import UniqueConstraint, create_engine, inspect
 
 # Expected tables from the models
 EXPECTED_TABLES = {
@@ -30,31 +29,6 @@ EXPECTED_TABLES = {
     "appointments",
     "appointment_audit_logs",
     "alembic_version",
-}
-
-# Expected indexes (subset for verification)
-EXPECTED_INDEXES = {
-    "staff": {"ix_staff_email", "ix_staff_role"},
-    "patients": {
-        "ix_patients_last_first",
-        "ix_patients_phone",
-        "ix_patients_is_active",
-    },
-    "dental_services": {"ix_dental_services_name", "ix_dental_services_is_active"},
-    "working_shifts": set(),  # unique constraint is separate from indexes
-    "time_off_blocks": {"ix_time_off_blocks_dentist_start_end"},
-    "appointments": {
-        "ix_appointments_dentist_start_end_status",
-        "ix_appointments_reminder_sent_at",
-    },
-    "appointment_audit_logs": {"ix_audit_logs_appointment_created"},
-}
-
-# Expected unique constraints
-EXPECTED_UNIQUE_CONSTRAINTS = {
-    "staff": {"uq_staff_email"},
-    "dental_services": {"uq_dental_services_name"},
-    "working_shifts": {"uq_dentist_day_start"},
 }
 
 
@@ -71,7 +45,7 @@ def alembic_script_location() -> Path:
 
 
 @pytest.fixture(scope="function")
-def migration_test_db_url() -> str:
+def migration_test_db_url() -> Iterator[str]:
     """Create a temporary file-based SQLite database URL for migration testing.
 
     Uses a temporary file instead of :memory: so it persists across
@@ -79,19 +53,53 @@ def migration_test_db_url() -> str:
     """
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
         db_path = tmp.name
-    return f"sqlite+aiosqlite:///{db_path}"
+    try:
+        yield f"sqlite+aiosqlite:///{db_path}"
+    finally:
+        Path(db_path).unlink(missing_ok=True)
 
 
-@pytest.fixture(scope="function")
-async def migration_test_engine(migration_test_db_url: str) -> AsyncEngine:
-    """Create a fresh SQLite engine for migration testing."""
-    engine = create_async_engine(
-        migration_test_db_url,
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    yield engine
-    await engine.dispose()
+def assert_schema_matches_metadata(database_url: str) -> None:
+    """Assert every model index and unique constraint exists exactly once."""
+    from app.models import Base
+
+    sync_url = database_url.replace("+aiosqlite", "")
+    sync_engine = create_engine(sync_url)
+    try:
+        inspector = inspect(sync_engine)
+        for table in Base.metadata.sorted_tables:
+            actual_indexes = {
+                (index["name"], tuple(index["column_names"]), bool(index["unique"]))
+                for index in inspector.get_indexes(table.name)
+            }
+            expected_indexes = {
+                (
+                    index.name,
+                    tuple(column.name for column in index.columns),
+                    bool(index.unique),
+                )
+                for index in table.indexes
+            }
+            assert actual_indexes == expected_indexes, (
+                f"Index drift on {table.name}: expected {expected_indexes}, "
+                f"got {actual_indexes}"
+            )
+
+            actual_constraints = {
+                (constraint["name"], tuple(constraint["column_names"]))
+                for constraint in inspector.get_unique_constraints(table.name)
+            }
+            expected_constraints = {
+                (constraint.name, tuple(column.name for column in constraint.columns))
+                for constraint in table.constraints
+                if isinstance(constraint, UniqueConstraint)
+            }
+            assert actual_constraints == expected_constraints, (
+                f"Unique constraint drift on {table.name}: "
+                f"expected {expected_constraints}, got {actual_constraints}"
+            )
+    finally:
+        sync_engine.dispose()
 
 
 def run_alembic_command(
@@ -127,8 +135,6 @@ class TestAlembicMigrations:
         assert result.returncode == 0, f"Alembic upgrade failed: {result.stderr}"
 
         # Verify all expected tables exist using a synchronous engine for inspection
-        from sqlalchemy import create_engine
-
         sync_engine = create_engine(migration_test_db_url.replace("+aiosqlite", ""))
         inspector = inspect(sync_engine)
         tables = set(inspector.get_table_names())
@@ -137,28 +143,17 @@ class TestAlembicMigrations:
         missing_tables = EXPECTED_TABLES - tables
         assert not missing_tables, f"Missing tables: {missing_tables}"
 
-        # Verify key indexes exist
-        sync_engine = create_engine(migration_test_db_url.replace("+aiosqlite", ""))
-        inspector = inspect(sync_engine)
-        for table, expected_indexes in EXPECTED_INDEXES.items():
-            if table not in tables:
-                continue
-            actual_indexes = {idx["name"] for idx in inspector.get_indexes(table)}
-            missing_indexes = expected_indexes - actual_indexes
-            assert not missing_indexes, f"Missing indexes on {table}: {missing_indexes}"
+        assert_schema_matches_metadata(migration_test_db_url)
 
-        # Verify unique constraints exist
-        for table, expected_constraints in EXPECTED_UNIQUE_CONSTRAINTS.items():
-            if table not in tables:
-                continue
-            actual_constraints = {
-                c["name"] for c in inspector.get_unique_constraints(table)
-            }
-            missing_constraints = expected_constraints - actual_constraints
-            assert not missing_constraints, (
-                f"Missing unique constraints on {table}: {missing_constraints}"
-            )
-        sync_engine.dispose()
+        # Alembic's own comparison also catches defaults, types, and constraints.
+        result = run_alembic_command(
+            ["check"],
+            cwd=alembic_config_path.parent,
+            env=get_alembic_env(migration_test_db_url),
+        )
+        assert result.returncode == 0, (
+            f"Alembic detected model/migration drift: {result.stdout}{result.stderr}"
+        )
 
     @pytest.mark.asyncio
     async def test_migration_downgrade_then_upgrade(
@@ -222,29 +217,7 @@ class TestAlembicMigrations:
         missing_tables = EXPECTED_TABLES - tables_after_reupgrade
         assert not missing_tables, f"Missing tables after re-upgrade: {missing_tables}"
 
-        # Verify indexes and unique constraints after re-upgrade
-        sync_engine = create_engine(migration_test_db_url.replace("+aiosqlite", ""))
-        inspector = inspect(sync_engine)
-        for table, expected_indexes in EXPECTED_INDEXES.items():
-            if table not in tables_after_reupgrade:
-                continue
-            actual_indexes = {idx["name"] for idx in inspector.get_indexes(table)}
-            missing_indexes = expected_indexes - actual_indexes
-            assert not missing_indexes, (
-                f"Missing indexes on {table} after re-upgrade: {missing_indexes}"
-            )
-        for table, expected_constraints in EXPECTED_UNIQUE_CONSTRAINTS.items():
-            if table not in tables_after_reupgrade:
-                continue
-            actual_constraints = {
-                c["name"] for c in inspector.get_unique_constraints(table)
-            }
-            missing_constraints = expected_constraints - actual_constraints
-            assert not missing_constraints, (
-                f"Missing unique constraints on {table} after "
-                f"re-upgrade: {missing_constraints}"
-            )
-        sync_engine.dispose()
+        assert_schema_matches_metadata(migration_test_db_url)
 
         # Verify revision is back at head
         result = run_alembic_command(
@@ -289,10 +262,10 @@ class TestAlembicMigrations:
         async with main.lifespan(main.app):
             pass
 
-    def test_postgresql_migration_uses_boolean_defaults(
+    def test_postgresql_migration_uses_no_unmodeled_server_defaults(
         self, alembic_config_path: Path
     ) -> None:
-        """PostgreSQL offline migration SQL must use boolean literals."""
+        """PostgreSQL SQL has no server defaults absent from model metadata."""
         result = run_alembic_command(
             ["upgrade", "head", "--sql"],
             cwd=alembic_config_path.parent,
@@ -300,7 +273,7 @@ class TestAlembicMigrations:
         )
 
         assert result.returncode == 0, result.stderr
-        assert "DEFAULT true" in result.stdout
+        assert "DEFAULT true" not in result.stdout
         assert "BOOLEAN DEFAULT 1" not in result.stdout
 
 
