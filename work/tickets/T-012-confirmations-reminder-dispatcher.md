@@ -1,7 +1,7 @@
 ---
 id: T-012
 title: Booking confirmations and 24h reminder dispatcher
-status: in-review
+status: done
 mode: AFK
 blocked_by: T-010
 spec_refs: specs/06-notifications-events.md#2-layer-1, specs/06-notifications-events.md#3-layer-2, specs/06-notifications-events.md#4-layer-3, specs/06-notifications-events.md#6-layer-5
@@ -87,3 +87,6 @@ Follow ADR 0002 dual-mode execution strategy: the maintenance endpoint supports 
 - [Review round 2 — Changes requested](../reviews/T-012-review-2.md): failed reminder deliveries are committed as sent; confirmation delivery still blocks the response; credential is committed in `.codex/config.toml`; missing CONFIRMED-status and delivery-persistence assertions.
 - **Implementation follow-up after round 2**: shared dispatcher releases failed claims and stamps only successful deliveries; confirmation notifications run as response background tasks; endpoint and worker use the same dispatcher; tests cover `CONFIRMED`, delivery persistence, retry after provider failure, and callback timing.
 - [Review round 3 — Changes requested](../reviews/T-012-review-3.md): confirmation callbacks are added during default request-scoped dependency cleanup, after FastAPI has executed response background tasks; current tests don't exercise confirmation delivery through the real ASGI lifecycle.
+
+- [Review round 4 — Approved](../reviews/T-012-review-4.md): no code findings; Ruff, format, and mypy pass; pytest 154 passed.
+

@@ -1,7 +1,7 @@
 ---
 id: T-013
 title: Add reversible Alembic migrations for production schema changes
-status: in-review
+status: done
 mode: AFK
 blocked_by: -
 spec_refs: specs/00-architecture.md#4-cross-cutting-design, reviews/final-review.md#f-001-production-schema-lifecycle-has-no-migrations
@@ -71,6 +71,7 @@ Commands run:
 1. [Round 1 changes requested](../reviews/T-013-review-1.md) — 2 blockers, 1 major.
 2. [Round 2 changes requested](../reviews/T-013-review-2.md) — 1 blocker (repository-wide format gate blocked by invalid UTF-8 in `work/TRACKER.md`).
 3. [Round 3 changes requested](../reviews/T-013-review-3.md) — 2 majors (migration/metadata drift and incomplete checks).
+4. [Round 4 approved](../reviews/T-013-review-4.md) — no findings; all quality gates passed.
 
 ### Review round 3 fixes
 
@@ -78,7 +79,7 @@ Commands run:
 - Replaced the hand-picked index assertions with full index and unique-constraint comparisons against `Base.metadata`; added Alembic's `check` command after a fresh upgrade to detect drift in types and defaults too.
 - Reused the complete schema assertion after downgrade/upgrade and made the temporary SQLite database fixture remove its file during teardown.
 - Validation: migration integration suite passed (9 passed); backend Ruff check and format check passed; backend mypy passed (39 source files); full backend pytest passed (161 passed, 2 skipped).
-- Commit: `039e827` (`T-013: align Alembic migration with model metadata`).
+- Commit: `9d3691d` (`T-013: align Alembic migration with model metadata`).
 
 ### Review round 2 format-gate fix
 

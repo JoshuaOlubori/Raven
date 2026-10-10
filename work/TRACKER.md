@@ -1,6 +1,6 @@
 # Tracker
 
-_Generated 2026-10-10 06:26 - 11/12 tickets done._
+_Generated 2026-10-10 09:40 - 13/15 tickets done._
 
 | ID | Title | Status | Mode | Blocked by |
 |---|---|---|---|---|
@@ -15,4 +15,7 @@ _Generated 2026-10-10 06:26 - 11/12 tickets done._
 | [T-009](tickets/T-009-appointment-reschedule-cancel.md) | Appointment reschedule and reasoned cancellation | done | AFK | T-008 |
 | [T-010](tickets/T-010-appointment-fsm-audit-log.md) | Appointment lifecycle FSM and immutable audit log | done | AFK | T-009 |
 | [T-011](tickets/T-011-live-appointment-sse-stream.md) | Real-time live appointment SSE stream | done | AFK | T-010 |
-| [T-012](tickets/T-012-confirmations-reminder-dispatcher.md) | Booking confirmations and 24h reminder dispatcher | in-review | AFK | T-010 |
+| [T-012](tickets/T-012-confirmations-reminder-dispatcher.md) | Booking confirmations and 24h reminder dispatcher | done | AFK | T-010 |
+| [T-013](tickets/T-013-alembic-migrations.md) | Add reversible Alembic migrations for production schema changes | done | AFK | - |
+| [T-014](tickets/T-014-atomic-appointment-overlap-guard.md) | Enforce atomic cross-worker appointment overlap prevention | todo | AFK | - |
+| [T-015](tickets/T-015-fail-closed-jwt-secret.md) | Require an explicit JWT signing secret outside development | todo | AFK | - |

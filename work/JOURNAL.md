@@ -88,3 +88,27 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-10 06:23 | implement | T-012 | T-012: fixed post-commit confirmation scheduling with function-scoped DB dependency; repaired UTF-8 board generation and added API lifecycle coverage |
 | 2026-10-10 06:25 | - | T-012 | status -> in-review |
 | 2026-10-10 06:25 | implement | T-012 | T-012 implementation complete; all four gates green and tracker board UTF-8 validated |
+| 2026-10-10 06:32 | review | T-012 | Review round 4 found no code issues; Ruff/format pass; mypy and pytest unavailable because configured Python interpreter cannot launch. Ticket remains in-review pending independent gate validation. |
+| 2026-10-10 06:34 | - | T-012 | status -> done |
+| 2026-10-10 06:40 | final-review | - | final review: do not ship; 3 follow-up tickets |
+| 2026-10-10 06:48 | - | T-013 | status -> in-progress |
+| 2026-10-10 07:42 | - | T-013 | status -> in-review |
+| 2026-10-10 08:59 | - | T-013 | status -> changes-requested |
+| 2026-10-10 08:59 | review | T-013 | review round 1: changes requested, 2B/1M/0m/0n; see work/reviews/T-013-review-1.md |
+| 2026-10-10 09:04 | - | T-013 | status -> in-progress |
+| 2026-10-10 09:07 | implement | - | T-013 review fixes committed as 2a3ba0b; gates passed except repository-wide Ruff format blocked by work/TRACKER.md encoding |
+| 2026-10-10 09:07 | - | T-013 | status -> in-review |
+| 2026-10-10 09:13 | - | T-013 | status -> changes-requested |
+| 2026-10-10 09:13 | - | T-013 | review round 2: changes-requested, 1B/0M/0m/0n; format gate blocked by invalid UTF-8 in work/TRACKER.md |
+| 2026-10-10 09:16 | - | T-013 | status -> in-progress |
+| 2026-10-10 09:18 | - | T-013 | status -> in-review |
+| 2026-10-10 09:20 | implement | T-013 | Fixed backend-scoped generated tracker encoding; Ruff format/check pass; moved ticket to in-review (mypy/pytest previously passed on unchanged implementation commit). |
+| 2026-10-10 09:22 | implement | T-013 | Committed UTF-8 repair as b732a34 (backend/work/TRACKER.md only); existing implementation remains 2a3ba0b. |
+| 2026-10-10 09:22 | - | T-013 | status -> changes-requested |
+| 2026-10-10 09:22 | - | T-013 | review round 3: changes-requested, 0B/2M/0m/1n; see work/reviews/T-013-review-3.md |
+| 2026-10-10 09:25 | - | T-013 | status -> in-progress |
+| 2026-10-10 09:27 | - | T-013 | status -> in-progress |
+| 2026-10-10 09:30 | - | T-013 | status -> in-review |
+| 2026-10-10 09:31 | implement | - | T-013 review round 3 fixes committed as 9d3691d; all four backend gates pass; moved to in-review |
+| 2026-10-10 09:40 | - | T-013 | status -> done |
+| 2026-10-10 09:40 | - | T-013 | review round 4: approve, 0B/0M/0m/0n; see work/reviews/T-013-review-4.md |
