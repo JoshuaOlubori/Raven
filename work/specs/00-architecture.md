@@ -104,7 +104,7 @@ backend/
 
 | Concern | Decision | Standard § | ADR |
 |---|---|---|---|
-| **Config & Secrets** | `pydantic-settings` `BaseSettings` reading from `.env` / environment variables. Exposes `Settings` object; validated at startup. | §8 | — |
+| **Config & Secrets** | `pydantic-settings` `BaseSettings` reading from `.env` / environment variables. Exposes `Settings` object; validated at startup. Non-development `JWT_SECRET_KEY` must be the 43-character URL-safe output of `secrets.token_urlsafe(32)` (32 cryptographically random bytes); repeated and sequential patterns are rejected. Generate directly into the deployment secret store or environment without printing it, for example in PowerShell: `$env:JWT_SECRET_KEY = & python -c "import secrets; print(secrets.token_urlsafe(32))"`. | §8 | — |
 | **Logging & Correlation ID** | `X-Correlation-ID` header extracted or generated via ASGI middleware. Included in all log records (JSON format) and injected into response headers. | §8, §11 | — |
 | **Global Error Model** | Central exception handler returning standardized RFC-compliant error body `{ "error": "<code_string>", "message": "<str>", "correlation_id": "<str>", "details": ... }`. Maps domain exceptions to HTTP 400, 401, 403, 404, 409, 422, 500. | §8 | — |
 | **Authentication (AuthN)** | Scoped Bearer JWT tokens signed with HMAC-SHA256 (`HS256`). Encodes `sub` (staff UUID), `role`, and `exp`. Injected via `OAuth2PasswordBearer` / `HTTPBearer` in `app/api/auth.py`. | §5, §8 | — |

@@ -129,3 +129,4 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-10 11:30 | - | T-015 | status -> changes-requested |
 | 2026-10-10 11:30 | review | T-015 | review round 1: changes-requested, 0B/1M/0m/0n; see work/reviews/T-015-review-1.md |
 | 2026-10-10 11:40 | implement | - | T-015: strengthened JWT secret validation with character diversity (upper, lower, digit, special char); all gates pass |
+| 2026-10-10 22:51 | - | T-016 | status -> in-progress |

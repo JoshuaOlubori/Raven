@@ -1,12 +1,14 @@
-"""Settings validation unit tests — T-015.
+"""Settings validation unit tests — T-015 and T-016.
 
 Verifies that JWT secret validation enforces strong secrets in non-development
 environments while allowing the default in development.
 
-Expected values come from T-015 acceptance criteria and NFR-6.
+Expected values come from T-015/T-016 acceptance criteria and NFR-6.
 """
 
 from __future__ import annotations
+
+import secrets
 
 import pytest
 from pydantic import ValidationError
@@ -14,16 +16,7 @@ from pydantic import ValidationError
 from app.config import Settings
 
 _DEV_DEFAULT = "dev-insecure-secret-change-in-production"
-# Strong secret meeting all requirements: 32+ chars, upper, lower, digit, special
-_STRONG_SECRET = "StrongSecret123!WithUpperLowerDigitSpecial"
-# Weak but long secrets that should be rejected
-_WEAK_ONLY_UPPER = "A" * 32
-_WEAK_ONLY_LOWER = "a" * 32
-_WEAK_ONLY_DIGITS = "1" * 32
-_WEAK_NO_SPECIAL = "StrongSecret123WithUpperLowerDigitOnly"
-_WEAK_NO_DIGIT = "StrongSecret!WithUpperLowerSpecialOnly"
-_WEAK_NO_UPPER = "strongsecret123!withlowerdigitspecial"
-_WEAK_NO_LOWER = "STRONGSECRET123!WITHUPPERDIGITSPECIAL"
+_STRONG_SECRET = secrets.token_urlsafe(32)
 
 
 def test_development_allows_default_secret() -> None:
@@ -55,35 +48,33 @@ def test_production_rejects_short_secret() -> None:
         Settings(app_env="production", jwt_secret_key="short")
 
     error_msg = str(exc_info.value)
-    assert "at least 32 characters" in error_msg
+    assert "32 cryptographically random bytes" in error_msg
     # Secret value must not appear in error message
     assert "short" not in error_msg
 
 
-def test_production_rejects_weak_but_long_secret() -> None:
-    """Production environment rejects weak-but-long secrets (low entropy)."""
-    weak_secrets = [
-        _WEAK_ONLY_UPPER,
-        _WEAK_ONLY_LOWER,
-        _WEAK_ONLY_DIGITS,
-        _WEAK_NO_SPECIAL,
-        _WEAK_NO_DIGIT,
-        _WEAK_NO_UPPER,
-        _WEAK_NO_LOWER,
-    ]
+def test_production_rejects_repeated_mixed_class_secret() -> None:
+    """A repeated mixed-class pattern is not a generated key."""
+    weak_secret = "Ab1_" * 10 + "Ab1"
 
-    for weak_secret in weak_secrets:
-        with pytest.raises(ValidationError) as exc_info:
-            Settings(app_env="production", jwt_secret_key=weak_secret)
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(app_env="production", jwt_secret_key=weak_secret)
 
-        error_msg = str(exc_info.value)
-        assert "uppercase, lowercase, digit, and special" in error_msg
-        # Secret value must not appear in error message
-        assert weak_secret not in error_msg
+    assert weak_secret not in str(exc_info.value)
 
 
-def test_production_accepts_strong_secret() -> None:
-    """Production environment accepts a sufficiently strong explicit secret."""
+def test_production_rejects_predictable_patterned_secret() -> None:
+    """A sequential key that happens to have the right alphabet is rejected."""
+    weak_secret = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq"
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(app_env="production", jwt_secret_key=weak_secret)
+
+    assert weak_secret not in str(exc_info.value)
+
+
+def test_production_accepts_cryptographically_random_secret() -> None:
+    """Production accepts a 32-byte random secret in URL-safe format."""
     settings = Settings(app_env="production", jwt_secret_key=_STRONG_SECRET)
     assert settings.jwt_secret_key == _STRONG_SECRET
 
@@ -102,7 +93,7 @@ def test_test_env_requires_strong_secret() -> None:
     with pytest.raises(ValidationError):
         Settings(app_env="test", jwt_secret_key=_DEV_DEFAULT)
 
-    # But strong secret works
+    # A generated secret works.
     settings = Settings(app_env="test", jwt_secret_key=_STRONG_SECRET)
     assert settings.jwt_secret_key == _STRONG_SECRET
 

@@ -19,32 +19,44 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 # Default insecure JWT secret used only for local development.
 # Production must explicitly configure a strong secret.
 _DEV_DEFAULT_JWT_SECRET = "dev-insecure-secret-change-in-production"
-_MIN_JWT_SECRET_LENGTH = 32
-
-# Regex for strong secret: 32+ chars, upper, lower, digit, special char.
-# Ensures sufficient entropy for JWT signing key.
-_STRONG_SECRET_PATTERN = re.compile(
-    r"^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]).{32,}$"
-)
+_GENERATED_SECRET_LENGTH = 43  # unpadded URL-safe base64 of 32 random bytes
+_URLSAFE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 
 
 def _is_strong_secret(secret: str) -> bool:
-    """Check if a secret meets the minimum strength requirements.
+    """Validate the documented random-key format and reject obvious patterns.
 
-    A strong secret must:
-    - Be at least 32 characters long
-    - Contain at least one uppercase letter
-    - Contain at least one lowercase letter
-    - Contain at least one digit
-    - Contain at least one special character
-
-    Args:
-        secret: The secret string to validate.
-
-    Returns:
-        True if the secret is strong, False otherwise.
+    Non-development keys must be generated with ``secrets.token_urlsafe(32)``.
+    The string format cannot prove its origin, so repeated and sequential
+    patterns are rejected as an additional guard.
     """
-    return bool(_STRONG_SECRET_PATTERN.match(secret))
+    if len(secret) != _GENERATED_SECRET_LENGTH or not re.fullmatch(
+        r"[A-Za-z0-9_-]{43}", secret
+    ):
+        return False
+
+    frequencies = {char: secret.count(char) for char in set(secret)}
+    if len(frequencies) < 12 or max(frequencies.values()) > 6:
+        return False
+
+    for period in range(1, _GENERATED_SECRET_LENGTH // 2 + 1):
+        repeated = (secret[:period] * (_GENERATED_SECRET_LENGTH // period)) + secret[
+            : _GENERATED_SECRET_LENGTH % period
+        ]
+        if secret == repeated:
+            return False
+
+    indexes = [_URLSAFE_ALPHABET.index(char) for char in secret]
+    for direction in (-1, 1):
+        run_length = 1
+        for previous, current in zip(indexes, indexes[1:]):
+            is_sequential = (
+                (current - previous) % len(_URLSAFE_ALPHABET) == direction
+            )
+            run_length = run_length + 1 if is_sequential else 1
+            if run_length >= 12:
+                return False
+    return True
 
 
 class Settings(BaseSettings):
@@ -66,6 +78,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = Field(
         default=_DEV_DEFAULT_JWT_SECRET,
         validation_alias="JWT_SECRET_KEY",
+        repr=False,
     )
     app_env: str = Field(
         default="development",
@@ -97,18 +110,11 @@ class Settings(BaseSettings):
                     "environments; the development default is not permitted."
                 )
 
-            # Non-development: secret must meet minimum strength
-            if len(self.jwt_secret_key) < _MIN_JWT_SECRET_LENGTH:
-                raise ValueError(
-                    f"JWT_SECRET_KEY must be at least {_MIN_JWT_SECRET_LENGTH} "
-                    f"characters in non-development environments."
-                )
-
-            # Non-development: secret must be strong (entropy + character diversity)
+            # Non-development: require the documented generated-key format.
             if not _is_strong_secret(self.jwt_secret_key):
                 raise ValueError(
-                    "JWT_SECRET_KEY must contain uppercase, lowercase, digit, "
-                    "and special character in non-development environments."
+                    "JWT_SECRET_KEY must be a non-patterned URL-safe key generated "
+                    "from at least 32 cryptographically random bytes."
                 )
 
         return self

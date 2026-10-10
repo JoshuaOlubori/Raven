@@ -1,6 +1,6 @@
 # Tracker
 
-_Generated 2026-10-10 11:30 - 15/15 tickets done._
+_Generated 2026-10-10 22:51 - 15/16 tickets done._
 
 | ID | Title | Status | Mode | Blocked by |
 |---|---|---|---|---|
@@ -19,3 +19,4 @@ _Generated 2026-10-10 11:30 - 15/15 tickets done._
 | [T-013](tickets/T-013-alembic-migrations.md) | Add reversible Alembic migrations for production schema changes | done | AFK | - |
 | [T-014](tickets/T-014-atomic-appointment-overlap-guard.md) | Enforce atomic cross-worker appointment overlap prevention | done | AFK | - |
 | [T-015](tickets/T-015-fail-closed-jwt-secret.md) | Require an explicit JWT signing secret outside development | done | AFK | - |
+| [T-016](tickets/T-016-jwt-secret-entropy.md) | Reject guessable JWT signing secrets in non-development environments | in-progress | AFK | - |
