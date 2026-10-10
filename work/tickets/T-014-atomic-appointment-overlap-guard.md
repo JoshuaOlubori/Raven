@@ -1,7 +1,7 @@
 ---
 id: T-014
 title: Enforce atomic cross-worker appointment overlap prevention
-status: in-review
+status: done
 mode: AFK
 blocked_by: -
 spec_refs: specs/05-appointments.md#5-concurrency, reviews/final-review.md#f-002-appointment-overlap-protection-does-not-serialize-empty-range-checks
@@ -53,3 +53,4 @@ PostgreSQL `SELECT ... FOR UPDATE` cannot lock a row that does not yet exist. Co
 ## Review history
 - Round 1: [review report](../reviews/T-014-review-1.md) — changes requested (0 blocker, 1 major, 1 minor, 0 nit).
 - Round 1 fixes: normalized PostgreSQL integration connection setup and aligned timezone-aware ORM timestamp types with the migration. Ready for review.
+- Round 2: [review report](../reviews/T-014-review-2.md) — approve (0 blocker, 0 major, 0 minor, 1 nit).

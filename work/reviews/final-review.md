@@ -5,92 +5,86 @@
 | Gate | Result | Evidence |
 |---|---|---|
 | Ruff | Pass | `uv run --directory backend ruff check` — all checks passed |
-| Format | Pass | `uv run --directory backend ruff format --check` — 62 files already formatted |
+| Format | Pass | `uv run --directory backend ruff format --check` — 68 files already formatted |
 | mypy | Pass | `uv run --directory backend mypy src` — 39 source files, no issues |
-| pytest | Pass | `uv run --directory backend pytest -q` — 152 passed, 2 skipped in 10.05s |
-| Coverage | Not measured | pytest-cov is not installed; adding `--cov` fails with unrecognized arguments |
-| Alembic migration smoke test | Not runnable | `backend/alembic.ini`, migration environment and revisions are absent; application instead invokes `Base.metadata.create_all()` at startup |
-| Production-like boot / OpenAPI comparison | Not verified | No production deployment configuration or API schema contract check was available; Redis service not provisioned in this environment |
-| Bandit / dependency audit / secret scan | Not run | Bandit, pip-audit, Trufflehog and Gitleaks executables are unavailable |
+| pytest | Pass with skips | `uv run --directory backend pytest -q` — 173 passed, 2 skipped in 69.71s |
+| Coverage | Not measured | pytest-cov is not configured/installed |
+| Alembic | Pass | Integration tests apply an empty-database migration, check metadata drift, downgrade to base, and upgrade again |
+| Production-like boot / OpenAPI comparison | Not verified | Direct boot/OpenAPI inspection could not launch the project interpreter in this environment; no schema-to-spec comparison is automated |
+| PostgreSQL booking race | Not exercised here | PostgreSQL concurrency tests skip unless `TEST_POSTGRES_DATABASE_URL` is configured; independent-session race cases are present |
+| Redis cross-worker event test | Not exercised here | Redis integration test skips unless `TEST_REDIS_URL` is configured |
+| Static security / dependency / secret scans | Not run | Bandit, dependency audit, and secret scanner are not configured as project gates |
 
-The working tree had existing user changes before this review. They were preserved.
+Existing user changes in the working tree were preserved. `backend/.env` is ignored by Git and was not read.
 
 ## PRD coverage matrix
 
 | Requirement | Ticket(s) | Tests/evidence | Status |
 |---|---|---|---|
-| R-1 Authentication | T-002 | Auth API tests; invalid/expired token paths | Covered |
-| R-2 RBAC | T-003 | Staff and module API role tests | Covered; review not an exhaustive route × role proof |
-| R-3 Patient profile | T-005 | Patient API tests | Covered |
-| R-4 Patient search/retrieval | T-005 | Search, pagination and detail API tests | Covered |
-| R-5 Patient soft-delete | T-005 | Delete and inactive-record behavior tests | Covered |
+| R-1 Authentication | T-002 | Auth API, token, invalid/expired-token tests | Covered |
+| R-2 RBAC | T-003 | API role tests across staff, patient, service, schedule, and appointment routers | Covered; exhaustive route × role matrix is not generated |
+| R-3 Patient profile | T-005 | Patient API validation and creation tests | Covered |
+| R-4 Patient search/retrieval | T-005 | Search, pagination, detail tests | Covered |
+| R-5 Patient soft-delete | T-005 | Deactivation and inactive-record behavior tests | Covered |
 | R-6 Service catalog | T-004 | Services API tests | Covered |
 | R-7 Shifts | T-006 | Schedule API tests | Covered |
-| R-8 Time off | T-006 | Schedule API tests incl. ownership authorization | Covered |
-| R-9 Availability | T-007 | API and unit tests incl. DST and timing | Covered |
-| R-10 Booking | T-008 | Appointment service/API tests | Gap: production concurrency guarantee is not proven (F-002) |
-| R-11 Reschedule | T-009 | Appointment service/API tests | Covered |
+| R-8 Time off | T-006 | Schedule API, ownership and overlap tests | Covered |
+| R-9 Availability | T-007 | Unit/API tests including DST and slot calculation | Covered; end-to-end performance target not measured |
+| R-10 Booking | T-008, T-014 | Booking tests and PostgreSQL concurrent-session integration tests | Code path has stable dentist-row lock; PostgreSQL tests not run here |
+| R-11 Reschedule | T-009, T-014 | Reschedule service/API tests and PostgreSQL concurrency case | Covered; PostgreSQL test not run here |
 | R-12 State transitions | T-010 | FSM and API tests | Covered |
-| R-13 Cancellation | T-009/T-010 | Reason and lifecycle tests | Covered |
-| R-14 Audit log | T-010 | Audit persistence/API tests | Covered at application level; database immutability enforcement not established |
-| R-15 Live SSE | T-011 | SSE API and Redis integration tests | Covered; Redis integration test skipped without configured test Redis |
-| R-16 Confirmations | T-012 | Service/API tests | Covered |
-| R-17 Reminders | T-012 | Dispatcher/repository/API tests | Covered; cross-worker claim/delivery behavior deserves deployment validation |
-| NFR-1 Zero double booking | T-008 | Sequential two-session test only | Gap (F-002) |
-| NFR-2 p95 latency | T-007/T-008 | Availability engine timing test | Partial: engine-only test, not end-to-end database/API load |
-| NFR-3 UTC/timezone/DST | T-006/T-007 | DST and timezone unit tests | Covered in tested cases |
-| NFR-4 Audit immutability | T-010 | Application audit tests | Partial: no database permissions/trigger enforcement |
-| NFR-5 Stateless workers | T-011/T-012 | Redis cross-instance test; reminder tests | Partial: event fan-out has cross-instance coverage, reminder claims lack atomic claim/lease proof |
-| NFR-6 Security | T-002/T-003/T-005 | Auth, password and authorization tests | Gap: default known JWT secret remains accepted in non-development configuration (F-003) |
+| R-13 Cancellation | T-009, T-010 | Reason validation and lifecycle tests | Covered |
+| R-14 Immutable audit log | T-010 | Audit API/persistence tests | Partial: append-only behavior is not enforced against direct database UPDATE/DELETE |
+| R-15 Live SSE | T-011 | SSE tests; Redis integration test | Covered locally; cross-worker test skipped here |
+| R-16 Confirmations | T-012 | Notification adapter and dispatch tests | Covered |
+| R-17 Reminders | T-012 | Dispatcher and API tests | Covered; concurrent-worker idempotency remains unproven |
+| NFR-1 Zero double-booking | T-014 | Stable dentist-row `FOR UPDATE` serialization; PostgreSQL race tests | Implementation addressed; release environment must run PostgreSQL race tests |
+| NFR-2 p95 latency | T-007, T-008 | Availability engine timing test | Partial: no endpoint/database load result |
+| NFR-3 Timezone consistency | T-006, T-007 | DST/timezone unit cases | Covered for tested cases |
+| NFR-4 Audit immutability | T-010 | Application behavior tests | Partial: database permissions/triggers do not prevent edits/deletes |
+| NFR-5 Stateless workers | T-011, T-012, T-014 | Redis transport, per-dentist DB locks, reminder tests | Partial: Redis and multi-worker reminder behavior need deployment-level verification |
+| NFR-6 Security | T-002, T-003, T-005, T-015 | Auth, RBAC, input, and JWT configuration tests | Major gap F-001: JWT strength checks admit guessable repeated values |
 
-No PRD out-of-scope functionality was identified in the reviewed routes and services.
+No out-of-scope feature was identified in the reviewed routes and services.
 
 ## Findings
 
-### Authorization completeness
-
-The implemented API routes are protected by authentication or explicit role guards, and tests exercise role denials across several modules. The review did not establish a complete generated OpenAPI route × role test matrix; this remains a minor assurance gap.
-
-### Architecture conformance
-
-- **[Major F-001] Production schema lifecycle has no migrations.** The architecture requires Alembic revisions and reversible upgrades, but there is no Alembic configuration or migration directory. `init_db()` calls `Base.metadata.create_all()` from lifespan. This cannot safely evolve an existing production schema or satisfy the required empty-database/downgrade/upgrade smoke test.
-- Layered `src/app` layout, async request sessions, centralized domain error handling and router separation are present. Several persistence flows use eager loading; list endpoints are bounded where paginated.
-- The architecture specifies JSON structured logging and a `/health` route; logs are standard-library text logs and there is no readiness check. These are minor operational gaps.
-
-### Performance and persistence
-
-- **[Blocker F-002] Appointment overlap protection does not serialize empty-range checks.** PostgreSQL `SELECT ... FOR UPDATE NOWAIT` only locks rows returned by the query. When no appointment currently overlaps, concurrent transactions both obtain an empty result and can both insert overlapping appointments. There is no exclusion constraint or per-dentist lock. The test named concurrent booking runs the two sessions sequentially with a commit between them, so it does not expose this race. This violates NFR-1, a release-critical guarantee.
-- Existing query patterns include pagination for patients; a full query-plan/index and endpoint load audit was not established. NFR-2 is only measured for the availability engine calculation, not end-to-end API/database latency.
-
-### Shared state and workers
-
-Redis backs cross-worker live event delivery and the integration test exists. Reminder delivery uses a read-then-send-then-mark flow; no atomic claim or lease was demonstrated to prevent two workers from concurrently sending the same reminder. Treat multi-worker reminder idempotency as a minor follow-up unless deployment requires multiple reminder workers.
-
 ### Security
 
-- **[Major F-003] Known JWT signing key is accepted as a runtime default.** `Settings.jwt_secret_key` defaults to `dev-insecure-secret-change-in-production`, and `app_env` does not reject that value outside development. A deployment missing `JWT_SECRET_KEY` would sign and accept tokens with a publicly known key. Require an explicitly supplied strong secret for non-development environments and test the startup failure.
-- Standard HTTP error bodies avoid returning exception text; passwords use Argon2; RBAC and active-account checks exist. Automated static security, dependency and secret scans were unavailable in this environment.
+- **[Major F-001] JWT secret validation accepts guessable repeated strings.** Non-development settings require a 32-character string with upper/lowercase, a digit, and a special character, but this is only a character-class test. Values such as `Aa1!` repeated to the minimum length satisfy the validator and remain trivial to guess, allowing token forgery. Require a cryptographically generated high-entropy secret (or a defensible entropy/known-pattern check) and test repeated/patterned values. Follow-up: T-016.
+- Password hashing uses Argon2; JWT signature and expiration validation, active-account checks, and role guards are present. Error responses sanitize internal exception details.
 
-### Cross-ticket consistency and operability
+### Architecture and persistence
 
-No urgent duplicated-helper or abandoned-flag issue was confirmed. README documents Redis setup and the event integration test, but does not provide full run/migrate/deploy guidance; `.env.example`, readiness semantics and structured JSON logging are absent or not documented.
+- The flat `src/app` layers, async request-scoped sessions, centralized domain errors, provider wiring, and Alembic migration lifecycle conform to the architecture in reviewed areas.
+- T-014 now takes a lock on the stable dentist row before checking overlaps, including the empty-result case. Two genuine concurrent PostgreSQL API tests are present, but were skipped without the configured database. Require them in CI/release verification before relying on NFR-1 operationally.
+- **[Minor F-002] Audit immutability is application-level only.** The model and migration do not prevent a database principal from updating/deleting audit rows, and cascading foreign keys can remove history with parent records. NFR-4 explicitly includes database users. Add database enforcement and align retention/deletion constraints.
+
+### Authorization completeness
+
+Protected routers use authentication or role guards, and tests cover representative role denials. A generated OpenAPI route × role matrix proving a test for every route and role is absent. **Minor F-003.**
+
+### Performance, shared state, and operations
+
+- Patient listing is paginated and relevant appointment indexes exist. A full query-plan/N+1 audit and end-to-end latency benchmark were not established; NFR-2 remains only partially evidenced.
+- Redis backs cross-worker SSE. Local broadcaster queues are bounded. Reminder dispatch uses a read/send/mark flow without a demonstrated atomic claim/lease, so concurrent workers may duplicate delivery. **Minor F-004.**
+- `/health`, correlation-ID propagation, logging, and migration instructions exist. Readiness semantics, JSON structured log formatting, `.env.example`, and complete deploy/runbook guidance remain incomplete. **Minor F-005.**
+- Automated security/dependency/secret scans are not part of the verified gates. **Minor F-006.**
 
 ## Verdict
 
-**Do not ship.** F-002 violates the product's zero-double-booking guarantee. F-001 and F-003 also need resolution before production deployment.
+**Ship after fixes.** Resolve F-001 before production because a guessable JWT key permits token forgery. The production release pipeline should also run the PostgreSQL concurrency suite against a real PostgreSQL service.
 
 ## Backlog
 
-- **Minor:** Install/configure pytest-cov and record measured coverage, including service coverage against the >90% target.
-- **Minor:** Add end-to-end API/database latency and query-plan checks for NFR-2.
-- **Minor:** Complete generated OpenAPI route × role authorization coverage.
-- **Minor:** Enforce immutable audit records at the database boundary and document production DB permissions.
-- **Minor:** Make reminder dispatch atomically claim work before sending to prevent duplicate delivery across workers.
-- **Minor:** Add readiness endpoint, JSON structured logs with correlation IDs, `.env.example`, and full run/test/migrate/deploy instructions.
-- **Minor:** Run Bandit/equivalent, dependency audit and secret scan in CI.
+- F-002: Enforce audit-log immutability at the database boundary and prevent cascades from erasing history.
+- F-003: Generate authorization tests for every OpenAPI route × role combination.
+- F-004: Atomically claim reminder work or use a lease/idempotency key for multi-worker dispatch.
+- F-005: Add readiness semantics, JSON structured logs, `.env.example`, and deployment/runbook instructions.
+- F-006: Add security, dependency, and secret scanning to CI.
+- Measure coverage and API/database p95 latency under the PRD's stated operational load.
+- Ensure PostgreSQL concurrency integration tests run in CI/release verification.
 
 ## Follow-up tickets
 
-- T-013: Add reversible Alembic migrations and remove production startup `create_all`.
-- T-014: Enforce atomic cross-worker appointment overlap prevention and prove it with true concurrent PostgreSQL sessions.
-- T-015: Reject missing/default JWT signing secrets outside development.
+- T-016: Reject guessable JWT signing secrets in non-development environments.

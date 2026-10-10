@@ -121,3 +121,11 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-10 10:30 | - | T-014 | review round 1: changes-requested, 0B/1M/1m/0n; PostgreSQL integration setup fails due driver/URL option mismatch |
 | 2026-10-10 10:37 | - | T-014 | status -> in-progress |
 | 2026-10-10 10:45 | - | T-014 | status -> in-review |
+| 2026-10-10 10:53 | - | T-014 | status -> done |
+| 2026-10-10 10:54 | - | T-014 | review round 2: approve, 0B/0M/0m/1n; see work/reviews/T-014-review-2.md |
+| 2026-10-10 11:04 | - | T-015 | status -> in-progress |
+| 2026-10-10 11:21 | - | T-015 | status -> in-review |
+| 2026-10-10 11:22 | build | - | checkpoint: T-015 implemented - JWT secret validation added for non-development environments |
+| 2026-10-10 11:30 | - | T-015 | status -> changes-requested |
+| 2026-10-10 11:30 | review | T-015 | review round 1: changes-requested, 0B/1M/0m/0n; see work/reviews/T-015-review-1.md |
+| 2026-10-10 11:40 | implement | - | T-015: strengthened JWT secret validation with character diversity (upper, lower, digit, special char); all gates pass |
