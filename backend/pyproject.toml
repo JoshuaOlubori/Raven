@@ -9,7 +9,7 @@ authors = [
 requires-python = ">=3.13,<3.14"
 dependencies = [
     # Core web framework & ASGI server
-    "fastapi>=0.118.0",
+    "fastapi>=0.121.0",
     "uvicorn[standard]>=0.30.0",
     # Validation & settings
     "pydantic>=2.10.0",

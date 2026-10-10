@@ -81,3 +81,10 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-10 06:05 | - | T-012 | status -> in-progress |
 | 2026-10-10 06:14 | - | T-012 | status -> in-review |
 | 2026-10-10 06:14 | - | T-012 | T-012 implementation committed as 89530af after removing .codex from reachable ticket history; ready for review. |
+| 2026-10-10 06:17 | - | T-012 | status -> changes-requested |
+| 2026-10-10 06:18 | - | T-012 | review round 3: changes-requested, 1B/1M/0m/0n; see work/reviews/T-012-review-3.md |
+| 2026-10-10 06:21 | - | T-012 | status -> in-progress |
+| 2026-10-10 06:21 | - | T-012 | status -> in-progress |
+| 2026-10-10 06:23 | implement | T-012 | T-012: fixed post-commit confirmation scheduling with function-scoped DB dependency; repaired UTF-8 board generation and added API lifecycle coverage |
+| 2026-10-10 06:25 | - | T-012 | status -> in-review |
+| 2026-10-10 06:25 | implement | T-012 | T-012 implementation complete; all four gates green and tracker board UTF-8 validated |

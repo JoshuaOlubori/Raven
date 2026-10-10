@@ -41,7 +41,7 @@ from app.services.service_catalog import ServiceCatalog
 async def get_db_session(
     background_tasks: BackgroundTasks,
 ) -> AsyncGenerator[AsyncSession]:
-    """Commit the request and defer registered callbacks until after its response."""
+    """Commit before response delivery and defer callbacks as background work."""
     session = SessionLocal()
     try:
         yield session
@@ -71,7 +71,7 @@ async def get_db_session(
 
 # Function-scoped cleanup is important for streaming endpoints: DB sessions
 # must close before the response body starts streaming.
-DbSessionDep = Annotated[AsyncSession, Depends(get_db_session)]
+DbSessionDep = Annotated[AsyncSession, Depends(get_db_session, scope="function")]
 
 
 # ---------------------------------------------------------------------------

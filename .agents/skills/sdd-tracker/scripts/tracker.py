@@ -31,7 +31,7 @@ def now():
 
 
 def parse(path):
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
     meta = {}
     if m:
@@ -56,22 +56,24 @@ def journal(msg, phase="-", ticket="-"):
     if not JOURNAL.exists():
         JOURNAL.write_text(
             "# Journal\n\nAppend-only history. Newest entries at the bottom.\n\n"
-            "| When | Phase | Ticket | Entry |\n|---|---|---|---|\n")
-    with JOURNAL.open("a") as f:
+            "| When | Phase | Ticket | Entry |\n|---|---|---|---|\n",
+            encoding="utf-8",
+        )
+    with JOURNAL.open("a", encoding="utf-8") as f:
         f.write(f"| {now()} | {phase} | {ticket} | {msg.replace('|', '/')} |\n")
 
 
 def board():
     ts = tickets()
     done = sum(1 for t in ts if t.get("status") == "done")
-    lines = ["# Tracker", "", f"_Generated {now()} — {done}/{len(ts)} tickets done._", "",
+    lines = ["# Tracker", "", f"_Generated {now()} - {done}/{len(ts)} tickets done._", "",
              "| ID | Title | Status | Mode | Blocked by |", "|---|---|---|---|---|"]
     for t in ts:
         lines.append(f"| [{t['id']}](tickets/{t['_path'].name}) | {t.get('title', '')} | "
                      f"{t.get('status', 'todo')} | {t.get('mode', 'AFK')} | "
                      f"{', '.join(t['blocked_by']) or '-'} |")
     ROOT.mkdir(exist_ok=True)
-    BOARD.write_text("\n".join(lines) + "\n")
+    BOARD.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return ts
 
 
@@ -88,10 +90,10 @@ def set_status(tid, new):
     for t in tickets():
         if t["id"] == tid:
             p = t["_path"]
-            text = p.read_text()
+            text = p.read_text(encoding="utf-8")
             text = re.sub(r"^status:.*$", f"status: {new}", text, count=1, flags=re.M)
             text = re.sub(r"^updated:.*$", f"updated: {dt.date.today()}", text, count=1, flags=re.M)
-            p.write_text(text)
+            p.write_text(text, encoding="utf-8")
             journal(f"status -> {new}", ticket=tid)
             board()
             return

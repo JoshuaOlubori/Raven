@@ -77,6 +77,8 @@ Follow ADR 0002 dual-mode execution strategy: the maintenance endpoint supports 
   - Kept SSE event callbacks on the post-commit path; only patient notifications are deferred until after the response.
 - Implementation commit: `89530af` (`T-012: Make reminder failures retryable and defer confirmations`).
 - Round 2 validation: Ruff check passed; Ruff format check passed for source/tests when excluding generated `work/TRACKER.md`; mypy passed; pytest 151 passed, 2 skipped. The unfiltered format command still reports an invalid UTF-8 stream for the generated tracker.
+- Review round 3 fixes: changed the shared database dependency to FastAPI function scope so it commits and queues callbacks before response background tasks run; raised the FastAPI minimum to 0.121.0 (the release that supports function-scoped `yield` dependencies); added an ASGI API test that verifies booking and reschedule confirmations run after their persisted commits. Updated the tracker helper to read and write UTF-8 explicitly, then regenerated `work/TRACKER.md`.
+- Round 3 validation: targeted ASGI test passed; Ruff check passed; Ruff format check passed for `backend/src`, `backend/tests`, and `work/TRACKER.md`; mypy passed; pytest 152 passed, 2 skipped.
 
 ## Review history
 
@@ -84,3 +86,4 @@ Follow ADR 0002 dual-mode execution strategy: the maintenance endpoint supports 
 - **Implementation follow-up after round 1**: atomic claim via UPDATE ... RETURNING prevents duplicate reminders; confirmations use after_commit_callbacks for post-commit dispatch; reschedule confirmation includes old and new slot times.
 - [Review round 2 — Changes requested](../reviews/T-012-review-2.md): failed reminder deliveries are committed as sent; confirmation delivery still blocks the response; credential is committed in `.codex/config.toml`; missing CONFIRMED-status and delivery-persistence assertions.
 - **Implementation follow-up after round 2**: shared dispatcher releases failed claims and stamps only successful deliveries; confirmation notifications run as response background tasks; endpoint and worker use the same dispatcher; tests cover `CONFIRMED`, delivery persistence, retry after provider failure, and callback timing.
+- [Review round 3 — Changes requested](../reviews/T-012-review-3.md): confirmation callbacks are added during default request-scoped dependency cleanup, after FastAPI has executed response background tasks; current tests don't exercise confirmation delivery through the real ASGI lifecycle.

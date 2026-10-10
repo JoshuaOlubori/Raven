@@ -1416,6 +1416,84 @@ class ReminderNotificationFake:
             raise RuntimeError("provider unavailable")
 
 
+async def test_booking_and_reschedule_confirmations_run_after_commit_via_api(
+    receptionist_staff: Staff,
+    test_dentist: Staff,
+    test_patient,
+    test_service: DentalService,
+    auth_headers: callable,
+    client: AsyncClient,
+    test_session_local,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T-012 R-16: HTTP confirmation tasks run after their commits."""
+
+    class ApiNotificationFake:
+        def __init__(self) -> None:
+            self.booking_ids: list[UUID] = []
+            self.reschedules: list[tuple[UUID, datetime, datetime]] = []
+            self.persisted_at_dispatch: list[bool] = []
+
+        async def send_booking_confirmation(self, appointment) -> None:
+            self.booking_ids.append(appointment.id)
+            async with test_session_local() as session:
+                self.persisted_at_dispatch.append(
+                    await session.get(type(appointment), appointment.id) is not None
+                )
+
+        async def send_reschedule_confirmation(
+            self, appointment, old_start_time, new_start_time
+        ) -> None:
+            self.reschedules.append((appointment.id, old_start_time, new_start_time))
+            async with test_session_local() as session:
+                persisted = await session.get(type(appointment), appointment.id)
+                self.persisted_at_dispatch.append(
+                    persisted is not None
+                    and persisted.start_time == new_start_time.replace(tzinfo=None)
+                )
+
+        async def send_reminder(self, appointment) -> None:
+            return None
+
+    notifications = ApiNotificationFake()
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_notification_service_dep,
+        lambda: notifications,
+    )
+    headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
+    clinic_tz = ZoneInfo("America/New_York")
+    old_start = datetime(2026, 1, 5, 9, 0, tzinfo=clinic_tz)
+    booking = await client.post(
+        "/api/v1/appointments",
+        headers=headers,
+        json={
+            "patientId": str(test_patient.id),
+            "dentistId": str(test_dentist.id),
+            "serviceId": str(test_service.id),
+            "startTime": old_start.isoformat(),
+        },
+    )
+    assert booking.status_code == 201
+    appointment_id = UUID(booking.json()["id"])
+
+    new_start = datetime(2026, 1, 5, 10, 0, tzinfo=clinic_tz)
+    rescheduled = await client.post(
+        f"/api/v1/appointments/{appointment_id}/reschedule",
+        headers=headers,
+        json={"startTime": new_start.isoformat()},
+    )
+    assert rescheduled.status_code == 200
+    assert notifications.booking_ids == [appointment_id]
+    assert len(notifications.reschedules) == 1
+    assert notifications.reschedules[0][0] == appointment_id
+    assert notifications.reschedules[0][1] == old_start.astimezone(
+        ZoneInfo("UTC")
+    ).replace(tzinfo=None)
+    assert notifications.reschedules[0][2] == new_start.astimezone(ZoneInfo("UTC"))
+    assert notifications.persisted_at_dispatch == [True, True]
+
+
 async def test_reminder_dispatch_endpoint_admin_200(
     reminder_test_setup: dict,
     client: AsyncClient,

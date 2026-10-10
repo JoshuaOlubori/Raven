@@ -22,7 +22,7 @@ See [work/prd.md](file:///c:/Users/seyi/Documents/Development/Raven/work/prd.md)
 | Component | Technology | Version | Purpose |
 |---|---|---|---|
 | Runtime | Python | >= 3.13 | High-performance modern Python runtime |
-| Web Framework | FastAPI | >= 0.118.0 | Web API, DI graph, OpenAPI documentation |
+| Web Framework | FastAPI | >= 0.121.0 | Web API, DI graph, OpenAPI documentation; function-scoped yield dependencies commit before response background tasks |
 | ASGI Server | Uvicorn (standard) | >= 0.30.0 | Production ASGI HTTP/SSE server |
 | Validation / Schemas | Pydantic v2 | >= 2.10.0 | Request/response validation, computed fields |
 | Settings Management | Pydantic Settings | >= 2.6.0 | 12-factor environment configuration |
