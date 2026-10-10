@@ -1,7 +1,7 @@
 ---
 id: T-015
 title: Require an explicit JWT signing secret outside development
-status: todo
+status: in-progress
 mode: AFK
 blocked_by: -
 spec_refs: specs/00-architecture.md#4-cross-cutting-design, reviews/final-review.md#f-003-known-jwt-signing-key-is-accepted-as-a-runtime-default
@@ -16,15 +16,15 @@ Production and non-development environments cannot start with a known or weak JW
 Validate runtime settings so non-development environments require an explicitly configured strong `JWT_SECRET_KEY` and reject the current insecure default. Keep local development and isolated test setup usable without weakening production validation.
 
 ## Acceptance criteria
-- [ ] Given `APP_ENV` is production and `JWT_SECRET_KEY` is missing, When settings load, Then startup fails with a clear configuration error.
-- [ ] Given a production secret equals the current development default or is below the documented minimum strength, When settings load, Then startup fails.
-- [ ] Given a sufficiently strong explicit production secret, When settings load, Then startup succeeds.
-- [ ] Given development configuration, When no secret is provided, Then documented local behavior remains usable.
-- [ ] Error messages do not include the supplied secret value.
+- [x] Given `APP_ENV` is production and `JWT_SECRET_KEY` is missing, When settings load, Then startup fails with a clear configuration error.
+- [x] Given a production secret equals the current development default or is below the documented minimum strength, When settings load, Then startup fails.
+- [x] Given a sufficiently strong explicit production secret, When settings load, Then startup succeeds.
+- [x] Given development configuration, When no secret is provided, Then documented local behavior remains usable.
+- [x] Error messages do not include the supplied secret value.
 
 ## Test plan
 | # | Test name | Seam | Asserts | Expected value comes from |
-|---|---|---|---|---|
+|---|---|---|---|---|---|
 | 1 | test_production_requires_explicit_jwt_secret | Settings unit | validation error when omitted | F-003 |
 | 2 | test_production_rejects_known_default_secret | Settings unit | validation error | NFR-6 |
 | 3 | test_production_accepts_strong_secret | Settings unit | settings constructed | deployment configuration contract |
@@ -37,5 +37,13 @@ Secret vault provisioning, rotation workflows and token key identifiers.
 Use the existing `APP_ENV` setting in validation; do not log settings values on failure.
 
 ## Implementation log
+- Added model validator `_validate_jwt_secret_for_env` to `Settings` class in `backend/src/app/config.py`
+- Validation rejects the development default secret (`dev-insecure-secret-change-in-production`) in non-development environments
+- Validation enforces minimum 32-character secret length in non-development environments
+- Environment check is case-insensitive (development, Development, DEVELOPMENT all treated as development)
+- Error messages do not include the secret value
+- Development environment continues to allow the default insecure secret for local usability
+- Added 8 unit tests in `backend/tests/unit/test_config.py` covering all acceptance criteria
+- All quality gates pass: ruff check, ruff format, mypy, pytest (172 passed, 2 skipped)
 
 ## Review history
