@@ -349,7 +349,7 @@ async def test_booking_overlapping_time_off_rejected_409(
 # ---------------------------------------------------------------------------
 
 
-async def test_concurrent_booking_overlap_prevention_409(
+async def test_sequential_booking_overlap_conflict_409(
     receptionist_staff: Staff,
     test_dentist: Staff,
     test_patient: Staff,
@@ -357,12 +357,7 @@ async def test_concurrent_booking_overlap_prevention_409(
     auth_headers: callable,
     client: AsyncClient,
 ) -> None:
-    """NFR-1: Two concurrent bookings for same slot → 1 succeeds (201), 1 fails (409).
-
-    Note: With SQLite test DB, requests run sequentially so first commits
-    before second runs its overlap check. In production (PostgreSQL),
-    SELECT FOR UPDATE handles true concurrent requests.
-    """
+    """The API maps an already-committed overlapping booking to HTTP 409."""
 
     headers = auth_headers(receptionist_staff.id, receptionist_staff.role)
     clinic_tz = ZoneInfo("America/New_York")
@@ -380,7 +375,7 @@ async def test_concurrent_booking_overlap_prevention_409(
             },
         )
 
-    # Run sequentially to simulate first request committing before second checks
+    # This SQLite test covers conflict mapping, not concurrency serialization.
     resp1 = await post_booking()
     resp2 = await post_booking()
 

@@ -109,7 +109,13 @@ async def list_audit_logs_for_appointment(session: AsyncSession, appointment_id:
 During booking or rescheduling within an active `AsyncSession` transaction:
 ```python
 # 1. Fetch service duration to compute end_time = start_time + duration
-# 2. Acquire row-lock or check non-cancelled overlapping records:
+# 2. Acquire a row lock on the stable dentist record. This lock is held until
+#    the surrounding booking/rescheduling transaction commits and also covers
+#    the case where the overlap query returns no appointment rows:
+await session.execute(
+    select(Staff.id).where(Staff.id == dentist_id).with_for_update()
+)
+# 3. Check non-cancelled overlapping records:
 stmt = (
     select(Appointment.id)
     .where(
@@ -121,12 +127,12 @@ stmt = (
 )
 if exclude_id:
     stmt = stmt.where(Appointment.id != exclude_id)
-# Under PostgreSQL: .with_for_update() ensures serializable conflict rejection
+# Do not rely on FOR UPDATE on Appointment rows: an empty result locks nothing.
 existing = await session.scalar(stmt)
 if existing is not None:
     raise AppointmentOverlapConflictError("The requested time window overlaps an existing appointment for this dentist.")
 ```
-Any concurrent transaction attempting to write an overlapping slot fails the check and raises `409 Conflict`.
+The dentist-row lock serializes slot checks across PostgreSQL transactions, including when no appointment currently overlaps. After waiting for the previous transaction to commit, the next transaction re-runs the overlap query and raises `409 Conflict` if needed. Booking and rescheduling must use this same lock before checking the target dentist's schedule.
 
 ---
 

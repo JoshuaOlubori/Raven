@@ -112,3 +112,5 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-10 09:31 | implement | - | T-013 review round 3 fixes committed as 9d3691d; all four backend gates pass; moved to in-review |
 | 2026-10-10 09:40 | - | T-013 | status -> done |
 | 2026-10-10 09:40 | - | T-013 | review round 4: approve, 0B/0M/0m/0n; see work/reviews/T-013-review-4.md |
+| 2026-10-10 09:53 | - | T-014 | status -> in-progress |
+| 2026-10-10 09:59 | implement | - | T-014 uses a stable dentist-row database lock for booking and reschedule overlap checks; PostgreSQL integration tests added, but not executable here without TEST_POSTGRES_DATABASE_URL. |

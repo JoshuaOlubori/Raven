@@ -424,6 +424,19 @@ async def list_appointments(
     return list(result.unique().scalars().all())
 
 
+async def lock_dentist_appointment_schedule(
+    session: AsyncSession, dentist_id: UUID
+) -> None:
+    """Hold a stable dentist-row lock while checking and writing a slot.
+
+    The dentist row exists even when there are no appointments to overlap, so
+    PostgreSQL can serialize booking and rescheduling against this row.
+    """
+    await session.execute(
+        select(Staff.id).where(Staff.id == dentist_id).with_for_update()
+    )
+
+
 async def check_appointment_overlap(
     session: AsyncSession,
     dentist_id: UUID,
@@ -436,20 +449,14 @@ async def check_appointment_overlap(
     Two intervals [a, b) and [c, d) overlap iff max(a, c) < min(b, d).
     Equivalent to: start_time < existing.end_time AND end_time > existing.start_time
 
-    Uses SELECT ... FOR UPDATE NOWAIT so that under PostgreSQL two concurrent
-    transactions cannot both read zero overlapping rows and both insert
-    (ADR 0001, Spec 05 §5, NFR-1).  The lock is a no-op under SQLite (test DB)
-    but harmless — SQLite serialises writes at the file level already.
+    The caller must first hold ``lock_dentist_appointment_schedule`` until the
+    transaction commits; locking appointment rows cannot cover an empty result.
     """
-    stmt = (
-        select(Appointment.id)
-        .where(
-            Appointment.dentist_id == dentist_id,
-            Appointment.status != "CANCELLED",
-            Appointment.start_time < end_time,
-            Appointment.end_time > start_time,
-        )
-        .with_for_update(nowait=True)
+    stmt = select(Appointment.id).where(
+        Appointment.dentist_id == dentist_id,
+        Appointment.status != "CANCELLED",
+        Appointment.start_time < end_time,
+        Appointment.end_time > start_time,
     )
     if exclude_id is not None:
         stmt = stmt.where(Appointment.id != exclude_id)

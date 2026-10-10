@@ -290,11 +290,12 @@ async def test_booking_overlapping_time_off_rejected(
 
 
 # ---------------------------------------------------------------------------
-# AC4: test_concurrent_booking_overlap_prevention_409
+# Sequential overlap conflict behavior; PostgreSQL concurrency is covered by
+# tests/integration/test_postgres_appointment_concurrency.py.
 # ---------------------------------------------------------------------------
 
 
-async def test_concurrent_booking_overlap_prevention(
+async def test_sequential_booking_overlap_conflict(
     test_session_local,
     test_dentist: Staff,
     test_patient,
@@ -302,11 +303,7 @@ async def test_concurrent_booking_overlap_prevention(
     clinic_tz: ZoneInfo,
     monday_shift: WorkingShift,
 ) -> None:
-    """NFR-1: Concurrent requests for same slot → one succeeds, one fails 409.
-
-    Note: With SQLite, we commit first so second sees it. In PostgreSQL,
-    SELECT FOR UPDATE handles true concurrent requests.
-    """
+    """A second booking fails after the first transaction commits."""
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from app.config import Settings
@@ -317,7 +314,7 @@ async def test_concurrent_booking_overlap_prevention(
         ZoneInfo("UTC")
     )
 
-    # Create two separate sessions to simulate concurrent requests
+    # Use separate SQLite sessions to check the sequential conflict case.
     async def attempt_booking(session: AsyncSession) -> bool:
         """Try to book the same slot, return True if success."""
         service = AppointmentService(session=session, settings=settings)
@@ -332,8 +329,7 @@ async def test_concurrent_booking_overlap_prevention(
         except AppointmentOverlapConflictError:
             return False
 
-    # Run two bookings sequentially with commit in between to simulate
-    # concurrent requests where first commits before second checks
+    # Commit the first booking before the second session checks for overlap.
     async with test_session_local() as session1:
         result1 = await attempt_booking(session1)
         await session1.commit()

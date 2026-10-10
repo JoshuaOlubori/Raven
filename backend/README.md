@@ -12,4 +12,15 @@ Events use the `raven:appointment-events:v1` channel. Redis Pub/Sub is transient
 
 For the cross-worker integration test, start a test Redis instance and set `TEST_REDIS_URL`. The test uses two independent broadcaster instances to verify that an event published through one instance reaches a subscriber on the other.
 
+## Appointment overlap concurrency test (T-014)
+
+The PostgreSQL concurrency tests use two independent request sessions and create an isolated, temporary schema. Set `TEST_POSTGRES_DATABASE_URL` to a dedicated test database using the `postgresql+asyncpg://` scheme, then run:
+
+```powershell
+$env:TEST_POSTGRES_DATABASE_URL = "postgresql+asyncpg://user:password@localhost/raven_test"
+uv run --directory backend pytest -q tests/integration/test_postgres_appointment_concurrency.py
+```
+
+The tests skip when the variable is unset. The temporary schema is dropped after each test.
+
 After changing dependencies, run `uv lock` from the repository root or `uv lock --directory backend` as supported by your installed uv version, then commit the updated `backend/uv.lock`.

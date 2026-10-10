@@ -15,6 +15,7 @@ Two main approaches were considered:
 We chose **Dynamic Interval Computation with Database Overlap Enforcement**:
 - Available slots are generated on-the-fly when queried: Dentist working shifts minus active (non-cancelled) appointments and blocked intervals, chunked into intervals matching the requested service duration.
 - Booking and rescheduling transactions perform an atomic overlap check within the database transaction (using pessimistic locking or temporal range exclusion). Any concurrent write attempting to book an overlapping interval for the same dentist is rejected with HTTP `409 Conflict`.
+- The implementation locks the stable dentist row before checking appointments. This serializes overlapping checks even when the appointment query returns no rows; booking and rescheduling hold that lock through commit.
 
 ## Consequences
 ### Positive

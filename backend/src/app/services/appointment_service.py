@@ -33,6 +33,7 @@ from app.db.repository import (
     list_audit_logs_for_appointment,
     list_shifts_by_day,
     list_time_off_blocks,
+    lock_dentist_appointment_schedule,
     update_appointment,
 )
 from app.exceptions import (
@@ -188,13 +189,16 @@ class AppointmentService:
         # 3. Check time-off conflict
         await self._validate_time_off_conflict(dentist_id, start_time, end_time)
 
-        # 4. Check appointment overlap (atomic guard - Spec 05 §5)
+        # 4. Lock a stable row before checking overlaps; hold it through commit.
+        await lock_dentist_appointment_schedule(self._session, dentist_id)
+
+        # 5. Check appointment overlap (atomic guard - Spec 05 §5)
         if await check_appointment_overlap(
             self._session, dentist_id, start_time, end_time
         ):
             raise AppointmentOverlapConflictError()
 
-        # 5. Create appointment
+        # 6. Create appointment
         appointment = await create_appointment(
             self._session,
             patient_id=patient_id,
@@ -332,7 +336,10 @@ class AppointmentService:
             target_dentist_id, new_start_time, new_end_time
         )
 
-        # 7. Check appointment overlap (atomic guard - Spec 05 §5)
+        # 7. Serialize the target dentist's slot check through transaction commit.
+        await lock_dentist_appointment_schedule(self._session, target_dentist_id)
+
+        # 8. Check appointment overlap (atomic guard - Spec 05 §5)
         # Use exclude_id to avoid conflict with self
         if await check_appointment_overlap(
             self._session,
@@ -343,7 +350,7 @@ class AppointmentService:
         ):
             raise AppointmentOverlapConflictError()
 
-        # 8. Update appointment
+        # 9. Update appointment
         old_start_time = appointment.start_time
         appointment = await update_appointment(
             self._session,
