@@ -1,7 +1,7 @@
 ---
 id: T-015
 title: Require an explicit JWT signing secret outside development
-status: in-progress
+status: in-review
 mode: AFK
 blocked_by: -
 spec_refs: specs/00-architecture.md#4-cross-cutting-design, reviews/final-review.md#f-003-known-jwt-signing-key-is-accepted-as-a-runtime-default
@@ -40,10 +40,13 @@ Use the existing `APP_ENV` setting in validation; do not log settings values on 
 - Added model validator `_validate_jwt_secret_for_env` to `Settings` class in `backend/src/app/config.py`
 - Validation rejects the development default secret (`dev-insecure-secret-change-in-production`) in non-development environments
 - Validation enforces minimum 32-character secret length in non-development environments
+- Validation enforces strong secret requirements (uppercase, lowercase, digit, special char) in non-development environments via `_is_strong_secret()` helper and regex pattern
 - Environment check is case-insensitive (development, Development, DEVELOPMENT all treated as development)
 - Error messages do not include the secret value
 - Development environment continues to allow the default insecure secret for local usability
-- Added 8 unit tests in `backend/tests/unit/test_config.py` covering all acceptance criteria
-- All quality gates pass: ruff check, ruff format, mypy, pytest (172 passed, 2 skipped)
+- Added 15 unit tests in `backend/tests/unit/test_config.py` covering all acceptance criteria plus weak-but-long secret rejection
+- All quality gates pass: ruff check, ruff format, mypy, pytest (173 passed, 2 skipped)
 
 ## Review history
+- Round 1: [review report](../reviews/T-015-review-1.md) — changes requested (0 blocker, 1 major, 0 minor, 0 nit).
+- Round 2: fixes implemented; strength validation added; tests expanded to cover weak-but-long secrets.

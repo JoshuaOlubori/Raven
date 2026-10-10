@@ -14,7 +14,16 @@ from pydantic import ValidationError
 from app.config import Settings
 
 _DEV_DEFAULT = "dev-insecure-secret-change-in-production"
-_STRONG_SECRET = "this-is-a-strong-secret-key-with-32-chars"
+# Strong secret meeting all requirements: 32+ chars, upper, lower, digit, special
+_STRONG_SECRET = "StrongSecret123!WithUpperLowerDigitSpecial"
+# Weak but long secrets that should be rejected
+_WEAK_ONLY_UPPER = "A" * 32
+_WEAK_ONLY_LOWER = "a" * 32
+_WEAK_ONLY_DIGITS = "1" * 32
+_WEAK_NO_SPECIAL = "StrongSecret123WithUpperLowerDigitOnly"
+_WEAK_NO_DIGIT = "StrongSecret!WithUpperLowerSpecialOnly"
+_WEAK_NO_UPPER = "strongsecret123!withlowerdigitspecial"
+_WEAK_NO_LOWER = "STRONGSECRET123!WITHUPPERDIGITSPECIAL"
 
 
 def test_development_allows_default_secret() -> None:
@@ -49,6 +58,28 @@ def test_production_rejects_short_secret() -> None:
     assert "at least 32 characters" in error_msg
     # Secret value must not appear in error message
     assert "short" not in error_msg
+
+
+def test_production_rejects_weak_but_long_secret() -> None:
+    """Production environment rejects weak-but-long secrets (low entropy)."""
+    weak_secrets = [
+        _WEAK_ONLY_UPPER,
+        _WEAK_ONLY_LOWER,
+        _WEAK_ONLY_DIGITS,
+        _WEAK_NO_SPECIAL,
+        _WEAK_NO_DIGIT,
+        _WEAK_NO_UPPER,
+        _WEAK_NO_LOWER,
+    ]
+
+    for weak_secret in weak_secrets:
+        with pytest.raises(ValidationError) as exc_info:
+            Settings(app_env="production", jwt_secret_key=weak_secret)
+
+        error_msg = str(exc_info.value)
+        assert "uppercase, lowercase, digit, and special" in error_msg
+        # Secret value must not appear in error message
+        assert weak_secret not in error_msg
 
 
 def test_production_accepts_strong_secret() -> None:

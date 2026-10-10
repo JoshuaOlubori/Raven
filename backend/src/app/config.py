@@ -8,6 +8,7 @@ dependency-injection overrides.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from pydantic import Field, model_validator
@@ -19,6 +20,31 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 # Production must explicitly configure a strong secret.
 _DEV_DEFAULT_JWT_SECRET = "dev-insecure-secret-change-in-production"
 _MIN_JWT_SECRET_LENGTH = 32
+
+# Regex for strong secret: 32+ chars, upper, lower, digit, special char.
+# Ensures sufficient entropy for JWT signing key.
+_STRONG_SECRET_PATTERN = re.compile(
+    r"^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]).{32,}$"
+)
+
+
+def _is_strong_secret(secret: str) -> bool:
+    """Check if a secret meets the minimum strength requirements.
+
+    A strong secret must:
+    - Be at least 32 characters long
+    - Contain at least one uppercase letter
+    - Contain at least one lowercase letter
+    - Contain at least one digit
+    - Contain at least one special character
+
+    Args:
+        secret: The secret string to validate.
+
+    Returns:
+        True if the secret is strong, False otherwise.
+    """
+    return bool(_STRONG_SECRET_PATTERN.match(secret))
 
 
 class Settings(BaseSettings):
@@ -76,6 +102,13 @@ class Settings(BaseSettings):
                 raise ValueError(
                     f"JWT_SECRET_KEY must be at least {_MIN_JWT_SECRET_LENGTH} "
                     f"characters in non-development environments."
+                )
+
+            # Non-development: secret must be strong (entropy + character diversity)
+            if not _is_strong_secret(self.jwt_secret_key):
+                raise ValueError(
+                    "JWT_SECRET_KEY must contain uppercase, lowercase, digit, "
+                    "and special character in non-development environments."
                 )
 
         return self
