@@ -1,7 +1,7 @@
 ---
 id: T-015
 title: Require an explicit JWT signing secret outside development
-status: in-review
+status: done
 mode: AFK
 blocked_by: -
 spec_refs: specs/00-architecture.md#4-cross-cutting-design, reviews/final-review.md#f-003-known-jwt-signing-key-is-accepted-as-a-runtime-default
