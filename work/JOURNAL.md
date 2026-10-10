@@ -71,3 +71,4 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-09 16:43 | implement | T-011 | Added Redis cross-instance integration test at backend/tests/integration/test_redis_event_broker.py; test and quality gates not run in remote GitHub editor. Ticket remains in-progress pending owner-run validation. |
 
 | 2026-10-09 22:38 | review | T-011 | Round 4 approved (B0/M0/m0/n0); owner confirmed Redis integration 1 passed, Ruff/format/mypy clean, full pytest 141 passed; status -> done. See work/reviews/T-011-review-4.md. |
+| 2026-10-10 04:58 | - | T-012 | status -> in-progress |

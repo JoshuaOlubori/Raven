@@ -535,3 +535,13 @@ class AppointmentLiveEvent(BaseModel):
     timestamp: UTCDateTime = Field(
         default_factory=lambda: datetime.now(ZoneInfo("UTC"))
     )
+
+
+class ReminderDispatchResult(BaseModel):
+    """Result of reminder dispatch job — Spec 06 §2, Layer 1."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    dispatched_count: int = Field(alias="dispatchedCount")
+    checked_window_start: datetime = Field(alias="checkedWindowStart")
+    checked_window_end: datetime = Field(alias="checkedWindowEnd")

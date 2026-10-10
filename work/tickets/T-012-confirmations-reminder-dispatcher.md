@@ -1,12 +1,12 @@
 ---
 id: T-012
 title: Booking confirmations and 24h reminder dispatcher
-status: todo
+status: in-progress
 mode: AFK
 blocked_by: T-010
 spec_refs: specs/06-notifications-events.md#2-layer-1, specs/06-notifications-events.md#3-layer-2, specs/06-notifications-events.md#4-layer-3, specs/06-notifications-events.md#6-layer-5
 covers: R-16, R-17, NFR-5
-updated: 2026-10-03
+updated: 2026-10-10
 ---
 
 ## Outcome
@@ -23,11 +23,11 @@ Patients automatically receive booking/reschedule confirmation messages (via plu
 - Wire booking and reschedule confirmation calls into `AppointmentService`.
 
 ## Acceptance criteria
-- [ ] Given a successful appointment booking, When the database transaction commits, Then a booking confirmation is dispatched asynchronously via `NotificationService` (R-16).
-- [ ] Given a successful appointment reschedule, When committed, Then a reschedule confirmation is dispatched with old and new slot times (R-16).
-- [ ] Given an appointment scheduled 24 hours in the future with `reminder_sent_at` as null, When the reminder job runs, Then a reminder notification is dispatched and `reminder_sent_at` is set (R-17).
-- [ ] Given an appointment that already received a reminder, When the reminder job runs again, Then no duplicate reminder is sent (R-17, ADR 0002).
-- [ ] Given an external scheduler calling `POST /api/v1/appointments/reminders/dispatch`, Then it returns `200 OK` with `dispatchedCount` and time window details.
+- [x] Given a successful appointment booking, When the database transaction commits, Then a booking confirmation is dispatched asynchronously via `NotificationService` (R-16).
+- [x] Given a successful appointment reschedule, When committed, Then a reschedule confirmation is dispatched with old and new slot times (R-16).
+- [x] Given an appointment scheduled 24 hours in the future with `reminder_sent_at` as null, When the reminder job runs, Then a reminder notification is dispatched and `reminder_sent_at` is set (R-17).
+- [x] Given an appointment that already received a reminder, When the reminder job runs again, Then no duplicate reminder is sent (R-17, ADR 0002).
+- [x] Given an external scheduler calling `POST /api/v1/appointments/reminders/dispatch`, Then it returns `200 OK` with `dispatchedCount` and time window details.
 
 ## Test plan
 | # | Test name | Seam | Asserts | Expected value comes from |
@@ -45,5 +45,22 @@ Third-party Twilio/SendGrid production accounts (v1 uses `LoggingNotificationSer
 Follow ADR 0002 dual-mode execution strategy: the maintenance endpoint supports stateless multi-worker production deployments (NFR-5), while the lifespan asyncio task provides zero-config local operation.
 
 ## Implementation log
+- Added `ReminderDispatchResult` schema to `src/app/schemas.py` (Spec 06 §2)
+- Added `list_pending_reminders` and `mark_reminder_sent` repository functions to `src/app/db/repository.py` with proper timezone handling (naive UTC for database)
+- Added reminder dispatch endpoint `POST /api/v1/appointments/reminders/dispatch` to `src/app/routers/appointments.py` with Admin-only RBAC guard
+- Added in-process reminder worker loop in `src/app/main.py` lifespan (controlled by `ENABLE_IN_PROCESS_REMINDER_WORKER` setting)
+- Wired booking confirmation dispatch in `AppointmentService.book_appointment()` (fire-and-forget via `asyncio.create_task`)
+- Wired reschedule confirmation dispatch in `AppointmentService.reschedule_appointment()` (fire-and-forget)
+- Added `FakeNotificationService` test helper capturing dispatched notifications
+- Added tests:
+  - `test_booking_dispatches_confirmation_asynchronously` (service + fakes)
+  - `test_reschedule_dispatches_reschedule_confirmation` (service + fakes)
+  - `test_list_pending_reminders_selects_23_to_25h_window` (repository + DB)
+  - `test_mark_reminder_sent_idempotent` (repository + DB)
+  - `test_reminder_dispatch_endpoint_admin_200` (API + Admin auth)
+  - `test_reminder_dispatch_endpoint_receptionist_403` (API + RBAC)
+  - `test_reminder_dispatch_is_idempotent` (integration)
+  - `test_reminder_dispatch_unauthenticated_401` (API auth)
+- All quality gates pass: ruff check, ruff format, mypy, pytest (147 passed)
 
 ## Review history

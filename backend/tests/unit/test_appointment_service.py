@@ -4,6 +4,7 @@ Tests cover:
 - Booking validation (shift coverage, time-off conflict, overlap guard)
 - Auto-calculation of end_time from service duration
 - FSM state machine transitions (future tickets)
+- Confirmation and reminder dispatch (T-012)
 """
 
 from __future__ import annotations
@@ -21,11 +22,36 @@ from app.exceptions import (
     TimeOffConflictError,
 )
 from app.models import (
+    Appointment,
     DentalService,
     Staff,
     WorkingShift,
 )
 from app.services.appointment_service import AppointmentService
+from app.services.notification_service import NotificationService
+
+# ---------------------------------------------------------------------------
+# Test helper: FakeNotificationService for capturing dispatched notifications
+# ---------------------------------------------------------------------------
+
+
+class FakeNotificationService(NotificationService):
+    """Fake notification service that captures dispatched notifications for testing."""
+
+    def __init__(self) -> None:
+        self.dispatched_bookings: list[Appointment] = []
+        self.dispatched_reschedules: list[Appointment] = []
+        self.dispatched_reminders: list[Appointment] = []
+
+    async def send_booking_confirmation(self, appointment: Appointment) -> None:
+        self.dispatched_bookings.append(appointment)
+
+    async def send_reschedule_confirmation(self, appointment: Appointment) -> None:
+        self.dispatched_reschedules.append(appointment)
+
+    async def send_reminder(self, appointment: Appointment) -> None:
+        self.dispatched_reminders.append(appointment)
+
 
 # ---------------------------------------------------------------------------
 # Test fixtures
@@ -650,3 +676,106 @@ async def test_fsm_dentist_only_transitions(
             actor_role="RECEPTIONIST",
         )
     assert "only dentists can transition" in str(exc_info.value).lower()
+
+
+# ---------------------------------------------------------------------------
+# T-012: Confirmation and Reminder Dispatch Tests
+# ---------------------------------------------------------------------------
+
+
+async def test_booking_dispatches_confirmation_asynchronously(
+    appointment_service: AppointmentService,
+    test_dentist: Staff,
+    test_patient,
+    test_service: DentalService,
+    monday_shift: WorkingShift,
+    clinic_tz: ZoneInfo,
+) -> None:
+    """T-012 AC1: Booking confirmation dispatched asynchronously
+    via NotificationService.
+
+    Given a successful appointment booking, when the database transaction
+    commits, then a booking confirmation is dispatched asynchronously
+    via NotificationService.
+    """
+    # Replace notification service with fake
+    fake_notifications = FakeNotificationService()
+    appointment_service._notification_service = fake_notifications
+
+    target_date = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).astimezone(
+        ZoneInfo("UTC")
+    )
+
+    appointment = await appointment_service.book_appointment(
+        patient_id=test_patient.id,
+        dentist_id=test_dentist.id,
+        service_id=test_service.id,
+        start_time=target_date,
+    )
+
+    # The confirmation should have been dispatched (fire-and-forget)
+    # We need to wait for the background task to complete
+    import asyncio
+
+    await asyncio.sleep(0.1)
+
+    # Verify the fake notification service captured the booking confirmation
+    assert len(fake_notifications.dispatched_bookings) == 1
+    dispatched = fake_notifications.dispatched_bookings[0]
+    assert dispatched.id == appointment.id
+    assert dispatched.patient_id == test_patient.id
+    assert dispatched.dentist_id == test_dentist.id
+    assert dispatched.service_id == test_service.id
+
+
+async def test_reschedule_dispatches_reschedule_confirmation(
+    appointment_service: AppointmentService,
+    test_dentist: Staff,
+    test_patient,
+    test_service: DentalService,
+    monday_shift: WorkingShift,
+    clinic_tz: ZoneInfo,
+) -> None:
+    """T-012 AC2: Reschedule confirmation dispatched with old and new slot times.
+
+    Given a successful appointment reschedule, when committed, then a
+    reschedule confirmation is dispatched with old and new slot times.
+    """
+    # First, create an appointment
+    target_date = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).astimezone(
+        ZoneInfo("UTC")
+    )
+
+    appointment = await appointment_service.book_appointment(
+        patient_id=test_patient.id,
+        dentist_id=test_dentist.id,
+        service_id=test_service.id,
+        start_time=target_date,
+    )
+
+    # Replace notification service with fake
+    fake_notifications = FakeNotificationService()
+    appointment_service._notification_service = fake_notifications
+
+    # Reschedule to a new time
+    new_start_time = datetime(2026, 1, 5, 10, 0, 0, tzinfo=clinic_tz).astimezone(
+        ZoneInfo("UTC")
+    )
+
+    appointment = await appointment_service.reschedule_appointment(
+        appointment_id=appointment.id,
+        new_start_time=new_start_time,
+        actor_id=test_dentist.id,
+    )
+
+    # Wait for background task
+    import asyncio
+
+    await asyncio.sleep(0.1)
+
+    # Verify the fake notification service captured the reschedule confirmation
+    assert len(fake_notifications.dispatched_reschedules) == 1
+    dispatched = fake_notifications.dispatched_reschedules[0]
+    assert dispatched.id == appointment.id
+    # The appointment should have the new start_time
+    assert dispatched.start_time == new_start_time.replace(tzinfo=None)

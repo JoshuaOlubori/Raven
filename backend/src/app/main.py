@@ -8,6 +8,7 @@ mounting.  No business logic lives here.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 import uuid
@@ -17,7 +18,8 @@ from fastapi import FastAPI, Request
 from starlette.responses import JSONResponse, Response
 
 from app.config import get_settings
-from app.db.session import init_db
+from app.db.repository import list_pending_reminders, mark_reminder_sent
+from app.db.session import SessionLocal, init_db
 from app.exceptions import DomainError
 from app.models.appointment import (  # noqa: F401 — register table on Base.metadata
     Appointment,
@@ -41,8 +43,62 @@ from app.routers.schedules import router as schedules_router
 from app.routers.services import router as services_router
 from app.routers.staff import router as staff_router
 from app.services.event_broadcaster import get_event_broadcaster
+from app.services.notification_service import (
+    NotificationService,
+    get_notification_service,
+)
 
 logger = logging.getLogger("app")
+
+
+async def _reminder_worker_loop() -> None:
+    """Background task that dispatches 24h reminders every 15 minutes (ADR 0002).
+
+    Runs when ENABLE_IN_PROCESS_REMINDER_WORKER=true.
+    """
+    settings = get_settings()
+    if not getattr(settings, "enable_in_process_reminder_worker", True):
+        return
+
+    notification_service = get_notification_service()
+    logger.info("In-process reminder worker started (interval: 15 minutes)")
+
+    while True:
+        try:
+            await asyncio.sleep(15 * 60)  # 15 minutes
+            await _dispatch_reminders_once(notification_service)
+        except asyncio.CancelledError:
+            logger.info("In-process reminder worker cancelled")
+            break
+        except Exception:
+            logger.exception("In-process reminder worker error")
+
+
+async def _dispatch_reminders_once(notification_service: NotificationService) -> None:
+    """Execute a single reminder dispatch cycle."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+
+    now_utc = datetime.now(ZoneInfo("UTC"))
+    now_naive = now_utc.replace(tzinfo=None)
+    window_start = now_naive + timedelta(hours=23)
+    window_end = now_naive + timedelta(hours=25)
+
+    async with SessionLocal() as session:
+        pending_appointments = await list_pending_reminders(
+            session, window_start, window_end
+        )
+
+        for appointment in pending_appointments:
+            try:
+                await notification_service.send_reminder(appointment)
+                await mark_reminder_sent(session, appointment.id, now_utc)
+            except Exception:
+                logger.exception(
+                    "Failed to dispatch reminder for appointment %s", appointment.id
+                )
+
+        await session.commit()
 
 
 @contextlib.asynccontextmanager
@@ -51,9 +107,20 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
     await init_db()
     broadcaster = get_event_broadcaster()
     await broadcaster.start(get_settings().redis_url)
+
+    # Start in-process reminder worker if enabled (ADR 0002)
+    reminder_worker_task = None
+    settings = get_settings()
+    if getattr(settings, "enable_in_process_reminder_worker", True):
+        reminder_worker_task = asyncio.create_task(_reminder_worker_loop())
+
     try:
         yield
     finally:
+        if reminder_worker_task:
+            reminder_worker_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await reminder_worker_task
         await broadcaster.stop()
 
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date, datetime, time
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -494,6 +494,66 @@ async def update_appointment(
     await session.flush()
     await session.refresh(appointment)
     return appointment
+
+
+# ---------------------------------------------------------------------------
+# Reminder repository functions (Spec 06 §3 — Layer 2)
+# ---------------------------------------------------------------------------
+
+
+async def list_pending_reminders(
+    session: AsyncSession,
+    window_start: datetime,
+    window_end: datetime,
+) -> list[Appointment]:
+    """Fetch appointments in SCHEDULED/CONFIRMED state starting in window
+    with reminder_sent_at IS NULL.
+
+    Args:
+        session: Database session.
+        window_start: Start of the 23-25 hour window (inclusive).
+        window_end: End of the 23-25 hour window (inclusive).
+
+    Returns:
+        List of appointments with patient, dentist, and service eager-loaded.
+    """
+    stmt = (
+        select(Appointment)
+        .where(
+            Appointment.status.in_(["SCHEDULED", "CONFIRMED"]),
+            Appointment.reminder_sent_at.is_(None),
+            Appointment.start_time >= window_start,
+            Appointment.start_time <= window_end,
+        )
+        .options(
+            joinedload(Appointment.patient),
+            joinedload(Appointment.dentist),
+            joinedload(Appointment.service),
+        )
+    )
+    result = await session.scalars(stmt)
+    return list(result.unique().all())
+
+
+async def mark_reminder_sent(
+    session: AsyncSession, appointment_id: UUID, sent_at: datetime
+) -> None:
+    """Atomically set reminder_sent_at = sent_at for an appointment.
+
+    Uses WHERE reminder_sent_at IS NULL to ensure idempotency: if the
+    reminder was already sent, the update affects zero rows.
+
+    Args:
+        session: Database session.
+        appointment_id: UUID of the appointment to update.
+        sent_at: Timestamp to set as reminder_sent_at (should be timezone-aware UTC).
+    """
+    stmt = (
+        update(Appointment)
+        .where(Appointment.id == appointment_id, Appointment.reminder_sent_at.is_(None))
+        .values(reminder_sent_at=sent_at)
+    )
+    await session.execute(stmt)
 
 
 # ---------------------------------------------------------------------------

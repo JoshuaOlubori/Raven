@@ -37,6 +37,10 @@ class Settings(BaseSettings):
         default="redis://localhost:6379/0",
         validation_alias="REDIS_URL",
     )
+    enable_in_process_reminder_worker: bool = Field(
+        default=True,
+        validation_alias="ENABLE_IN_PROCESS_REMINDER_WORKER",
+    )
 
 
 def get_settings() -> Settings:

@@ -1,11 +1,6 @@
 # Tracker
 
-## Active workflow
-
-- [Local PR review, validation, troubleshooting, and merge runbook](PR-REVIEW-WORKFLOW.md) — general PR workflow.
-- [T-011 local implementation handoff](T-011-LOCAL-VALIDATION.md) — finish Redis integration test and quality-gate work for draft PR #2.
-
-_Generated 2026-10-09 — 10/12 tickets done._
+_Generated 2026-10-10 04:58 � 10/12 tickets done._
 
 | ID | Title | Status | Mode | Blocked by |
 |---|---|---|---|---|
@@ -20,4 +15,4 @@ _Generated 2026-10-09 — 10/12 tickets done._
 | [T-009](tickets/T-009-appointment-reschedule-cancel.md) | Appointment reschedule and reasoned cancellation | done | AFK | T-008 |
 | [T-010](tickets/T-010-appointment-fsm-audit-log.md) | Appointment lifecycle FSM and immutable audit log | in-review | AFK | T-009 |
 | [T-011](tickets/T-011-live-appointment-sse-stream.md) | Real-time live appointment SSE stream | done | AFK | T-010 |
-| [T-012](tickets/T-012-confirmations-reminder-dispatcher.md) | Booking confirmations and 24h reminder dispatcher | todo | AFK | T-010 |
+| [T-012](tickets/T-012-confirmations-reminder-dispatcher.md) | Booking confirmations and 24h reminder dispatcher | in-progress | AFK | T-010 |

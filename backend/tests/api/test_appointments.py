@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from httpx import AsyncClient
 
+from app.models.service import DentalService
 from app.models.staff import Staff
 
 # ---------------------------------------------------------------------------
@@ -1288,3 +1289,192 @@ def test_audit_log_immutability_no_update_or_delete() -> None:
         and "audit" in m.lower()
     ]
     assert mutation_methods == [], f"Audit mutation methods found: {mutation_methods}"
+
+
+# ---------------------------------------------------------------------------
+# T-012: Reminder Dispatch Tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def reminder_test_setup(
+    test_session_local,
+    admin_staff: Staff,
+    test_dentist: Staff,
+    test_service: DentalService,
+    test_patient,
+    auth_headers: callable,
+):
+    """Create appointments at various times for reminder testing.
+
+    Uses current time as base so the 23-25h window captures the right appointments.
+    """
+    from app.models.appointment import Appointment
+
+    # Base time is "now" in UTC
+    base_time = datetime.now(ZoneInfo("UTC"))
+    # But we need to create appointments in the future relative to when the test runs
+    # The endpoint calculates window_start = now + 23h, window_end = now + 25h
+    # So we need appointments with start_time in [now+23h, now+25h]
+
+    async with test_session_local() as session:
+        # Clean up any existing appointments first
+        from sqlalchemy import delete
+
+        await session.execute(delete(Appointment))
+        await session.commit()
+
+        # Appointment 24h in future (should get reminder - in window)
+        appt_24h = Appointment(
+            patient_id=test_patient.id,
+            dentist_id=test_dentist.id,
+            service_id=test_service.id,
+            start_time=(base_time + timedelta(hours=24)).replace(tzinfo=None),
+            end_time=(base_time + timedelta(hours=24, minutes=45)).replace(tzinfo=None),
+            status="SCHEDULED",
+            reminder_sent_at=None,
+        )
+        session.add(appt_24h)
+
+        # Appointment 22h in future (too soon - outside window)
+        appt_22h = Appointment(
+            patient_id=test_patient.id,
+            dentist_id=test_dentist.id,
+            service_id=test_service.id,
+            start_time=(base_time + timedelta(hours=22)).replace(tzinfo=None),
+            end_time=(base_time + timedelta(hours=22, minutes=45)).replace(tzinfo=None),
+            status="SCHEDULED",
+            reminder_sent_at=None,
+        )
+        session.add(appt_22h)
+
+        # Appointment 26h in future (too far - outside window)
+        appt_26h = Appointment(
+            patient_id=test_patient.id,
+            dentist_id=test_dentist.id,
+            service_id=test_service.id,
+            start_time=(base_time + timedelta(hours=26)).replace(tzinfo=None),
+            end_time=(base_time + timedelta(hours=26, minutes=45)).replace(tzinfo=None),
+            status="SCHEDULED",
+            reminder_sent_at=None,
+        )
+        session.add(appt_26h)
+
+        # COMPLETED appointment in window (should be excluded)
+        completed_start = (base_time + timedelta(hours=24, minutes=15)).replace(
+            tzinfo=None
+        )
+        completed_end = (base_time + timedelta(hours=25)).replace(tzinfo=None)
+        appt_completed = Appointment(
+            patient_id=test_patient.id,
+            dentist_id=test_dentist.id,
+            service_id=test_service.id,
+            start_time=completed_start,
+            end_time=completed_end,
+            status="COMPLETED",
+            reminder_sent_at=None,
+        )
+        session.add(appt_completed)
+
+        await session.commit()
+        await session.refresh(appt_24h)
+        await session.refresh(appt_22h)
+        await session.refresh(appt_26h)
+        await session.refresh(appt_completed)
+
+        return {
+            "appt_24h": appt_24h,
+            "appt_22h": appt_22h,
+            "appt_26h": appt_26h,
+            "appt_completed": appt_completed,
+            "admin_headers": auth_headers(admin_staff.id, admin_staff.role),
+            "receptionist_headers": auth_headers(
+                test_dentist.id, "RECEPTIONIST"
+            ),  # Use dentist as receptionist for 403 test
+        }
+
+
+async def test_reminder_dispatch_endpoint_admin_200(
+    reminder_test_setup: dict,
+    client: AsyncClient,
+) -> None:
+    """T-012 AC5: Admin can call POST /reminders/dispatch → 200 with dispatchedCount."""
+    setup = reminder_test_setup
+    admin_headers = setup["admin_headers"]
+
+    response = await client.post(
+        "/api/v1/appointments/reminders/dispatch",
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "dispatchedCount" in body
+    assert body["dispatchedCount"] == 1  # Only the 24h SCHEDULED appt with no reminder
+    assert "checkedWindowStart" in body
+    assert "checkedWindowEnd" in body
+
+
+async def test_reminder_dispatch_endpoint_receptionist_403(
+    reminder_test_setup: dict,
+    client: AsyncClient,
+) -> None:
+    """T-012 AC5: Receptionist cannot call POST /reminders/dispatch → 403."""
+    setup = reminder_test_setup
+    receptionist_headers = setup["receptionist_headers"]
+
+    response = await client.post(
+        "/api/v1/appointments/reminders/dispatch",
+        headers=receptionist_headers,
+    )
+
+    assert response.status_code == 403
+    body = response.json()
+    assert body["error"] == "RBAC_FORBIDDEN"
+
+
+async def test_reminder_dispatch_is_idempotent(
+    reminder_test_setup: dict,
+    client: AsyncClient,
+    test_session_local,
+) -> None:
+    """T-012 AC4: Second execution dispatches 0 reminders;
+    reminder_sent_at unchanged.
+    """
+    setup = reminder_test_setup
+    admin_headers = setup["admin_headers"]
+    appt_24h = setup["appt_24h"]
+
+    # First dispatch
+    response1 = await client.post(
+        "/api/v1/appointments/reminders/dispatch",
+        headers=admin_headers,
+    )
+    assert response1.status_code == 200
+    assert response1.json()["dispatchedCount"] == 1
+
+    # Get the reminder_sent_at after first dispatch
+    from app.models.appointment import Appointment
+
+    async with test_session_local() as session:
+        refreshed = await session.get(Appointment, appt_24h.id)
+        first_sent_at = refreshed.reminder_sent_at
+
+    # Second dispatch (should be idempotent)
+    response2 = await client.post(
+        "/api/v1/appointments/reminders/dispatch",
+        headers=admin_headers,
+    )
+    assert response2.status_code == 200
+    assert response2.json()["dispatchedCount"] == 0
+
+    # Verify reminder_sent_at unchanged
+    async with test_session_local() as session:
+        refreshed = await session.get(Appointment, appt_24h.id)
+        assert refreshed.reminder_sent_at == first_sent_at
+
+
+async def test_reminder_dispatch_unauthenticated_401(client: AsyncClient) -> None:
+    """Unauthenticated reminder dispatch → 401."""
+    response = await client.post("/api/v1/appointments/reminders/dispatch")
+    assert response.status_code == 401

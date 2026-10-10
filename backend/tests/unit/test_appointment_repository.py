@@ -20,6 +20,8 @@ from app.db.repository import (
     create_appointment,
     get_appointment_detail,
     list_appointments,
+    list_pending_reminders,
+    mark_reminder_sent,
 )
 from app.models.appointment import Appointment
 from app.models.patient import Patient
@@ -361,3 +363,156 @@ async def test_check_appointment_overlap_exclude_id(
             session, repo_dentist.id, start_time, end_time
         )
         assert has_overlap is True
+
+
+# ---------------------------------------------------------------------------
+# Reminder query tests (Spec 06 §3, T-012)
+# ---------------------------------------------------------------------------
+
+
+async def test_list_pending_reminders_selects_23_to_25h_window(
+    test_session_local: async_sessionmaker,
+    repo_dentist: Staff,
+    repo_patient: Patient,
+    repo_service: DentalService,
+) -> None:
+    """T-012 AC3: list_pending_reminders selects appointments in 23-25h
+    window with reminder_sent_at NULL.
+
+    - 24h appointment (in window) should be included
+    - 22h appointment (too soon) should be excluded
+    - 26h appointment (too far) should be excluded
+    """
+    from datetime import timedelta
+
+    async with test_session_local() as session:
+        clinic_tz = ZoneInfo("America/New_York")
+        # Base time: Monday Jan 5, 2026 at 09:00 EST = 14:00 UTC
+        base_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).astimezone(
+            ZoneInfo("UTC")
+        )
+
+        # Create 3 appointments at different offsets from base_time
+        # 24h in the future (within 23-25h window) - SHOULD BE INCLUDED
+        appt_24h = await create_appointment(
+            session,
+            patient_id=repo_patient.id,
+            dentist_id=repo_dentist.id,
+            service_id=repo_service.id,
+            start_time=base_time + timedelta(hours=24),
+            end_time=base_time + timedelta(hours=24, minutes=45),
+            status="SCHEDULED",
+        )
+
+        # 22h in the future (outside window - too soon) - SHOULD BE EXCLUDED
+        _appt_22h = await create_appointment(
+            session,
+            patient_id=repo_patient.id,
+            dentist_id=repo_dentist.id,
+            service_id=repo_service.id,
+            start_time=base_time + timedelta(hours=22),
+            end_time=base_time + timedelta(hours=22, minutes=45),
+            status="SCHEDULED",
+        )
+
+        # 26h in the future (outside window - too far) - SHOULD BE EXCLUDED
+        _appt_26h = await create_appointment(
+            session,
+            patient_id=repo_patient.id,
+            dentist_id=repo_dentist.id,
+            service_id=repo_service.id,
+            start_time=base_time + timedelta(hours=26),
+            end_time=base_time + timedelta(hours=26, minutes=45),
+            status="SCHEDULED",
+        )
+
+        # 24h but reminder already sent - SHOULD BE EXCLUDED
+        appt_24h_sent = await create_appointment(
+            session,
+            patient_id=repo_patient.id,
+            dentist_id=repo_dentist.id,
+            service_id=repo_service.id,
+            start_time=base_time + timedelta(hours=24, minutes=30),
+            end_time=base_time + timedelta(hours=25, minutes=15),
+            status="SCHEDULED",
+        )
+        appt_24h_sent.reminder_sent_at = base_time.replace(tzinfo=None)
+        session.add(appt_24h_sent)
+
+        # COMPLETED appointment in window - SHOULD BE EXCLUDED
+        _appt_completed = await create_appointment(
+            session,
+            patient_id=repo_patient.id,
+            dentist_id=repo_dentist.id,
+            service_id=repo_service.id,
+            start_time=base_time + timedelta(hours=24, minutes=15),
+            end_time=base_time + timedelta(hours=25),
+            status="COMPLETED",
+        )
+
+        await session.commit()
+
+        # Query with window: 23-25 hours from base_time
+        window_start = base_time + timedelta(hours=23)
+        window_end = base_time + timedelta(hours=25)
+
+        pending = await list_pending_reminders(session, window_start, window_end)
+
+        # Only the 24h SCHEDULED appointment with
+        # reminder_sent_at NULL should be returned
+        assert len(pending) == 1
+        assert pending[0].id == appt_24h.id
+        assert pending[0].reminder_sent_at is None
+        assert pending[0].status == "SCHEDULED"
+
+        # Verify eager-loaded relations
+        assert pending[0].patient is not None
+        assert pending[0].dentist is not None
+        assert pending[0].service is not None
+
+
+async def test_mark_reminder_sent_idempotent(
+    test_session_local: async_sessionmaker,
+    repo_dentist: Staff,
+    repo_patient: Patient,
+    repo_service: DentalService,
+) -> None:
+    """T-012 AC4: mark_reminder_sent is idempotent - second call affects zero rows."""
+    from datetime import timedelta
+
+    async with test_session_local() as session:
+        clinic_tz = ZoneInfo("America/New_York")
+        base_time = datetime(2026, 1, 5, 9, 0, 0, tzinfo=clinic_tz).astimezone(
+            ZoneInfo("UTC")
+        )
+
+        appointment = await create_appointment(
+            session,
+            patient_id=repo_patient.id,
+            dentist_id=repo_dentist.id,
+            service_id=repo_service.id,
+            start_time=base_time + timedelta(hours=24),
+            end_time=base_time + timedelta(hours=24, minutes=45),
+            status="SCHEDULED",
+        )
+        await session.commit()
+
+        # First call - should set reminder_sent_at
+        sent_at_1 = base_time + timedelta(hours=1)
+        await mark_reminder_sent(session, appointment.id, sent_at_1)
+        await session.commit()
+
+        # Verify it was set
+        refreshed = await session.get(Appointment, appointment.id)
+        assert refreshed.reminder_sent_at is not None
+        # Database stores timezone-aware UTC; compare with timezone-aware value
+        assert refreshed.reminder_sent_at == sent_at_1
+
+        # Second call - should NOT change reminder_sent_at (idempotent)
+        sent_at_2 = base_time + timedelta(hours=2)
+        await mark_reminder_sent(session, appointment.id, sent_at_2)
+        await session.commit()
+
+        # Verify reminder_sent_at is unchanged (still first timestamp)
+        refreshed = await session.get(Appointment, appointment.id)
+        assert refreshed.reminder_sent_at == sent_at_1

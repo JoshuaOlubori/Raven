@@ -14,7 +14,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 
 from app.api.auth import CurrentUserDep, get_current_user, require_roles
-from app.api.deps import AppointmentServiceDep
+from app.api.deps import AppointmentServiceDep, DbSessionDep, NotificationServiceDep
+from app.db.repository import list_pending_reminders, mark_reminder_sent
 from app.models.appointment import Appointment
 from app.schemas import (
     AppointmentCancel,
@@ -23,6 +24,7 @@ from app.schemas import (
     AppointmentReschedule,
     AppointmentStatusUpdate,
     AuditLogRead,
+    ReminderDispatchResult,
 )
 
 router = APIRouter(prefix="/api/v1/appointments", tags=["appointments"])
@@ -277,3 +279,56 @@ async def get_audit_logs_endpoint(
     """
     audit_logs = await service.get_audit_logs(appointment_id)
     return [AuditLogRead.model_validate(log) for log in audit_logs]
+
+
+# ---------------------------------------------------------------------------
+# Reminder Dispatch (Admin only) — Spec 06 §4, T-012
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/reminders/dispatch",
+    response_model=ReminderDispatchResult,
+    dependencies=[Depends(require_roles("ADMIN"))],
+)
+async def dispatch_reminders_endpoint(
+    session: DbSessionDep,
+    notification_service: NotificationServiceDep,
+) -> ReminderDispatchResult:
+    """Dispatch 24h pre-visit reminders for appointments in 23-25h window (R-17).
+
+    Protected maintenance endpoint for external cron runners in multi-worker
+    environments. Returns count of dispatched reminders and the time window checked.
+
+    Idempotent: uses WHERE reminder_sent_at IS NULL to prevent duplicate dispatches.
+    """
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+
+    # Calculate the 23-25 hour window from now
+    # Database stores naive UTC, so we use naive UTC for window boundaries
+    now_utc = datetime.now(ZoneInfo("UTC"))
+    now_naive = now_utc.replace(tzinfo=None)
+    window_start = now_naive + timedelta(hours=23)
+    window_end = now_naive + timedelta(hours=25)
+
+    # Query pending reminders
+    pending_appointments = await list_pending_reminders(
+        session, window_start, window_end
+    )
+
+    dispatched_count = 0
+    for appointment in pending_appointments:
+        # Dispatch reminder via notification service
+        await notification_service.send_reminder(appointment)
+        # Mark reminder as sent (idempotent: WHERE reminder_sent_at IS NULL)
+        await mark_reminder_sent(session, appointment.id, now_utc)
+        dispatched_count += 1
+
+    await session.commit()
+
+    return ReminderDispatchResult(
+        dispatchedCount=dispatched_count,
+        checkedWindowStart=window_start,
+        checkedWindowEnd=window_end,
+    )
