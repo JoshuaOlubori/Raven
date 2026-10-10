@@ -1,6 +1,6 @@
 # Tracker
 
-_Generated 2026-10-10 10:37 - 13/15 tickets done._
+_Generated 2026-10-10 10:45 - 13/15 tickets done._
 
 | ID | Title | Status | Mode | Blocked by |
 |---|---|---|---|---|
@@ -17,5 +17,5 @@ _Generated 2026-10-10 10:37 - 13/15 tickets done._
 | [T-011](tickets/T-011-live-appointment-sse-stream.md) | Real-time live appointment SSE stream | done | AFK | T-010 |
 | [T-012](tickets/T-012-confirmations-reminder-dispatcher.md) | Booking confirmations and 24h reminder dispatcher | done | AFK | T-010 |
 | [T-013](tickets/T-013-alembic-migrations.md) | Add reversible Alembic migrations for production schema changes | done | AFK | - |
-| [T-014](tickets/T-014-atomic-appointment-overlap-guard.md) | Enforce atomic cross-worker appointment overlap prevention | in-progress | AFK | - |
+| [T-014](tickets/T-014-atomic-appointment-overlap-guard.md) | Enforce atomic cross-worker appointment overlap prevention | in-review | AFK | - |
 | [T-015](tickets/T-015-fail-closed-jwt-secret.md) | Require an explicit JWT signing secret outside development | todo | AFK | - |

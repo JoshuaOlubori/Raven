@@ -120,3 +120,4 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-10 10:30 | - | T-014 | status -> changes-requested |
 | 2026-10-10 10:30 | - | T-014 | review round 1: changes-requested, 0B/1M/1m/0n; PostgreSQL integration setup fails due driver/URL option mismatch |
 | 2026-10-10 10:37 | - | T-014 | status -> in-progress |
+| 2026-10-10 10:45 | - | T-014 | status -> in-review |

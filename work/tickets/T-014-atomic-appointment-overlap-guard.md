@@ -1,7 +1,7 @@
 ---
 id: T-014
 title: Enforce atomic cross-worker appointment overlap prevention
-status: in-progress
+status: in-review
 mode: AFK
 blocked_by: -
 spec_refs: specs/05-appointments.md#5-concurrency, reviews/final-review.md#f-002-appointment-overlap-protection-does-not-serialize-empty-range-checks
@@ -48,6 +48,7 @@ PostgreSQL `SELECT ... FOR UPDATE` cannot lock a row that does not yet exist. Co
 - PostgreSQL setup exposed ORM timestamp columns declared without time zones while the existing Alembic migration uses timezone-aware columns. Updated the ORM declarations for appointment, audit, time-off, and shared timestamps to match the migration and UTC-aware application values. Scoped the persisted-reschedule assertion to the test dentist and asserted exactly two rows.
 - Review round 1 validation: `uv run --directory backend ruff check`, `uv run --directory backend ruff format --check`, `uv run --directory backend mypy src`, and `uv run --directory backend pytest -q` passed (164 passed, 2 skipped). The configured PostgreSQL concurrency tests ran as part of pytest; the initial run exposed the ORM/migration timestamp mismatch, and the rerun passed all three cases.
 - Minor review note remains: the API test requests use one in-process ASGI app, although each request has an independent database session and the production synchronization is PostgreSQL row locking. A separate process-level regression harness is a possible follow-up.
+- Review-fix commit: `8de3a2c`.
 
 ## Review history
 - Round 1: [review report](../reviews/T-014-review-1.md) — changes requested (0 blocker, 1 major, 1 minor, 0 nit).
