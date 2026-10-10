@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from datetime import date, datetime, time, timedelta
+from pathlib import Path
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import AsyncClient
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import select, text
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api import deps
@@ -18,7 +21,39 @@ from app.models import Base, DentalService, Patient, Staff, WorkingShift
 from app.models.appointment import Appointment
 from app.services import appointment_service
 
-TEST_POSTGRES_DATABASE_URL = os.getenv("TEST_POSTGRES_DATABASE_URL")
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+class PostgresTestSettings(BaseSettings):
+    """Load the optional integration URL from process env or backend/.env."""
+
+    model_config = SettingsConfigDict(env_file=BACKEND_DIR / ".env", extra="ignore")
+
+    database_url: str | None = Field(
+        default=None, validation_alias="TEST_POSTGRES_DATABASE_URL"
+    )
+
+
+def _asyncpg_test_url(raw_url: str) -> URL:
+    """Adapt a libpq-style URL to the asyncpg driver supported by this project."""
+    url = make_url(raw_url)
+    if url.drivername in {"postgresql", "postgresql+psycopg"}:
+        url = url.set(drivername="postgresql+asyncpg")
+
+    query = dict(url.query)
+    sslmode = query.pop("sslmode", None)
+    query.pop("channel_binding", None)
+    if sslmode is not None:
+        query["ssl"] = sslmode
+    return url.set(query=query)
+
+
+TEST_POSTGRES_DATABASE_URL = PostgresTestSettings().database_url
+ASYNC_TEST_POSTGRES_URL = (
+    _asyncpg_test_url(TEST_POSTGRES_DATABASE_URL)
+    if TEST_POSTGRES_DATABASE_URL
+    else None
+)
 
 
 @pytest.fixture
@@ -28,12 +63,13 @@ async def postgres_sessions(monkeypatch: pytest.MonkeyPatch):
         pytest.skip("Set TEST_POSTGRES_DATABASE_URL to an isolated PostgreSQL database")
 
     schema = f"test_t014_{uuid4().hex}"
-    admin_engine = create_async_engine(TEST_POSTGRES_DATABASE_URL)
+    assert ASYNC_TEST_POSTGRES_URL is not None
+    admin_engine = create_async_engine(ASYNC_TEST_POSTGRES_URL)
     async with admin_engine.begin() as connection:
         await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
 
     engine = create_async_engine(
-        TEST_POSTGRES_DATABASE_URL,
+        ASYNC_TEST_POSTGRES_URL,
         connect_args={"server_settings": {"search_path": schema}},
     )
     try:
@@ -201,7 +237,14 @@ async def test_concurrent_postgres_reschedules_allow_only_one(
 
     assert sorted(response.status_code for response in responses) == [200, 409]
     async with postgres_sessions() as session:
-        rows = list((await session.scalars(select(Appointment))).all())
+        rows = list(
+            (
+                await session.scalars(
+                    select(Appointment).where(Appointment.dentist_id == dentist.id)
+                )
+            ).all()
+        )
+    assert len(rows) == 2
     rows.sort(key=lambda row: row.start_time)
     assert rows[0].end_time <= rows[1].start_time
 

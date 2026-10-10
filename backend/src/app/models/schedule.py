@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, time
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Index, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -53,8 +53,8 @@ class TimeOffBlock(Base, UUIDMixin, TimestampMixin):
     dentist_id: Mapped[UUID] = mapped_column(
         ForeignKey("staff.id", ondelete="CASCADE"), index=True
     )
-    start_time: Mapped[datetime] = mapped_column(index=True)
-    end_time: Mapped[datetime] = mapped_column(index=True)
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    end_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     reason: Mapped[str | None]
 
     dentist: Mapped[Staff] = relationship(back_populates="time_off_blocks")

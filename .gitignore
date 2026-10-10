@@ -1,6 +1,11 @@
 # Local harness settings
 settings.local.json
 
+# Local environment configuration (commit .env.example templates only)
+.env
+.env.*
+!.env.example
+
 # Python bytecode + caches
 __pycache__/
 *.py[cod]

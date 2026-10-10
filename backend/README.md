@@ -1,5 +1,11 @@
 # Raven backend
 
+## Configuration
+
+Runtime configuration is loaded with `pydantic-settings` from `backend/.env` and can be overridden by process environment variables. The local `.env` file is ignored by Git. Set `JWT_SECRET_KEY` to a strong random value before using the service beyond local development.
+
+The supported runtime variables are `DATABASE_URL`, `CLINIC_TIMEZONE`, `JWT_SECRET_KEY`, `APP_ENV`, `REDIS_URL`, and `ENABLE_IN_PROCESS_REMINDER_WORKER`. Optional integration-test variables are `TEST_POSTGRES_DATABASE_URL` and `TEST_REDIS_URL`.
+
 ## Live appointment events (T-011)
 
 The live SSE endpoint is multi-worker capable and uses Redis Pub/Sub as the shared event transport.

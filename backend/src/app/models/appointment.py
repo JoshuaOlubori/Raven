@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Index
+from sqlalchemy import DateTime, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -53,11 +53,11 @@ class Appointment(Base, UUIDMixin, TimestampMixin):
     service_id: Mapped[UUID] = mapped_column(
         ForeignKey("dental_services.id", ondelete="CASCADE"), index=True
     )
-    start_time: Mapped[datetime] = mapped_column(index=True)
-    end_time: Mapped[datetime] = mapped_column(index=True)
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    end_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     status: Mapped[str] = mapped_column(default="SCHEDULED", index=True)
     cancellation_reason: Mapped[str | None]
-    reminder_sent_at: Mapped[datetime | None]
+    reminder_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     patient: Mapped[Patient] = relationship(back_populates="appointments")
     dentist: Mapped[Staff] = relationship(back_populates="appointments")

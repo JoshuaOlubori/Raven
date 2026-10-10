@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, Index
+from sqlalchemy import DateTime, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, UUIDMixin, utcnow
@@ -43,10 +43,12 @@ class AppointmentAuditLog(Base, UUIDMixin):
     actor_id: Mapped[UUID] = mapped_column(ForeignKey("staff.id"), index=True)
     from_status: Mapped[str | None]
     to_status: Mapped[str | None]
-    old_start_time: Mapped[datetime | None]
-    new_start_time: Mapped[datetime | None]
+    old_start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    new_start_time: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     note: Mapped[str | None]
-    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow
+    )
 
     appointment: Mapped[Appointment] = relationship(
         back_populates="audit_logs",

@@ -115,3 +115,8 @@ Append-only history. Newest entries at the bottom.
 | 2026-10-10 09:53 | - | T-014 | status -> in-progress |
 | 2026-10-10 09:59 | implement | - | T-014 uses a stable dentist-row database lock for booking and reschedule overlap checks; PostgreSQL integration tests added, but not executable here without TEST_POSTGRES_DATABASE_URL. |
 | 2026-10-10 09:59 | - | T-014 | status -> in-review |
+| 2026-10-10 10:21 | - | T-014 | status -> done |
+| 2026-10-10 10:21 | - | T-014 | review round 1: approve, 0B/0M/1m/0n |
+| 2026-10-10 10:30 | - | T-014 | status -> changes-requested |
+| 2026-10-10 10:30 | - | T-014 | review round 1: changes-requested, 0B/1M/1m/0n; PostgreSQL integration setup fails due driver/URL option mismatch |
+| 2026-10-10 10:37 | - | T-014 | status -> in-progress |
