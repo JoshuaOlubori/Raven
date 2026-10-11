@@ -80,3 +80,28 @@ For independent tickets (several in `tracker.py next`), run implementations in p
 ## Pairing with Matt Pocock's skills
 
 These skills adapt ideas from his repo (`mattpocock/skills`, MIT): `grill-me` / `grill-with-docs` (interview, glossary, ADRs), `to-spec` + `to-tickets` (vertical slices, blocking edges, HITL/AFK), `tdd` (red → green at agreed seams), `code-review` (Standards + Spec axes, Fowler smells), `retro`, and `setup-matt-pocock-skills` (local-markdown tracker). Skills worth installing beside them: `diagnosing-bugs` for stubborn failures, `domain-modeling` for sharpening the glossary, `research` for background reading on a library, `improve-codebase-architecture` after the final review.
+
+## Frontend screen-driven workflow
+
+Frontend work uses the same markdown-first pattern, with all project state in `work/frontend/`. The reusable `frontend-*` skills live alongside the backend skills. `work/frontend/screens.md` is the project-specific manifest: copy `docs/templates/frontend-screen-manifest.md` when starting a different project and replace its source, screen rows, and constraints.
+
+To reuse the workflow in another repository, copy the `frontend-*` skill directories into that repository's `.claude/skills/` and/or `.agents/skills/` folder, and copy the manifest template into `docs/templates/`. When both tool folders exist, keep their skill copies identical. Create a fresh `work/frontend/screens.md` there; do not carry over this project's screen rows.
+
+```text
+frontend-resume
+  → frontend-screens
+  → frontend-setup
+  → frontend-tech-spec
+  → frontend-tickets
+  → (frontend-implement → frontend-ticket-review)*
+  → frontend-final-review (mock phase + user sign-off)
+  → (frontend-implement → frontend-ticket-review)* (backend wiring)
+  → frontend-final-review (release)
+  → frontend-retro
+```
+
+`frontend-screens` exports each screen and reference, then audits visible fields, actions, and permissions against OpenAPI/backend specs. Ticket generation uses only audited manifest rows; it never carries screen names, roles, routes, or endpoint assumptions from one project into another. Unsupported design elements are removed or redesigned and recorded in the audit.
+
+Phase A implements every approved screen with contract-shaped MSW data through the same API client and hooks intended for live use. After each screen's responsive browser review, the mock-phase final review presents the complete experience for user review. The user can request modifications or approve the phase gate. Phase B backend tickets stay blocked until that explicit approval. Phase B wires only audited API operations and preserves exact OpenAPI paths and permissions.
+
+Visual screen tickets require Playwright MCP browser evidence at 375, 768, 1024, and 1440 CSS-pixel widths. Evidence and review reports are saved under `work/frontend/`. For a new project, replace `work/frontend/screens.md`; keep the skills generic.

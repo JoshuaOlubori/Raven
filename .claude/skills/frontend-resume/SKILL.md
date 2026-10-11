@@ -1,85 +1,45 @@
 ---
 name: frontend-resume
-description: Orient a fresh session in the frontend spec-driven workflow — read the work/frontend/ tracker, work out which phase the project is in, and name the exact next skill to run — or wrap up a session by checkpointing state before the user clears context. Use at the START of every new session or after /clear, and at the END of a session when the user says "wrap up", "checkpoint", "I'm stopping", or "what's next" for frontend work. Also use when the user asks "where are we with the frontend?".
+description: Determine the current frontend workflow phase, read its tracker and journal, and name the next frontend skill. Use at the start of every frontend session, after clearing context, or when the user asks where frontend work stands or asks to checkpoint it.
 ---
 
 # Frontend Resume
 
-Start every frontend session here. It reads the tracker and tells you exactly what to do next.
+Read the current project state before choosing work. Never infer a screen, backend capability, or completed sign-off from a skill example.
 
-## Quick Start (run these commands)
+## Start
 
-```bash
-# 1. Show the board
-python .claude/skills/frontend-tracker/scripts/tracker.py board
+1. Read `work/frontend/screens.md` and check asset and audit status when present.
+2. Read `work/frontend/TRACKER.md`, the last 30 lines of `work/frontend/JOURNAL.md`, and the active ticket or review report.
+3. When Python is available, refresh the board and ready frontier with `tracker.py board`, `tracker.py next`, and `tracker.py validate`. On Windows use `py -3`; otherwise use the configured `python3` command. If execution is unavailable, read the Markdown files directly and report that limitation.
+4. Tell the user the phase and the next skill with one reason.
 
-# 2. Show ready tickets (blockers all done)
-python .claude/skills/frontend-tracker/scripts/tracker.py next
+## Phase routing
 
-# 3. Read the last ~30 lines of journal
-tail -30 work/frontend/JOURNAL.md
-```
+| State | Next skill |
+|---|---|
+| No `work/frontend/screens.md` or screen set changed | `frontend-screens` |
+| Screen assets or contract audits are incomplete | `frontend-screens` |
+| Screen audit has unresolved design/API questions | Present the documented decision to the user; keep dependent tickets out of the ready set |
+| Screen set audited; no initialized frontend app | `frontend-setup` |
+| App exists; no approved frontend specs | `frontend-tech-spec` |
+| Specs approved; no tickets | `frontend-tickets` |
+| A ticket is `in-progress` or changes were requested | `frontend-implement` |
+| A ticket is `in-review` | `frontend-ticket-review` |
+| Mock phase gate is `awaiting-signoff` | Show the mock phase evidence and ask for the user's sign-off or changes |
+| All mock tickets are done; gate is ready | `frontend-final-review` with scope `mock phase` |
+| A backend wiring ticket is ready | `frontend-implement` |
+| All backend tickets are done | `frontend-final-review` with scope `release` |
+| Final review is complete | `frontend-retro` when requested or at project close |
 
-## Phase Detection
+Use actual tracker statuses and the screen manifest to distinguish mock work from backend wiring. A mock phase is not approved merely because its code review passes; the user must approve the phase gate before any backend wiring ticket becomes ready.
 
-The frontend project moves through these phases. Check `work/frontend/TRACKER.md` and `work/frontend/specs/` to determine current phase.
+## User requests
 
-| Phase | Signal | Next Skill |
-|---|---|---|
-| **Not started** | No `work/frontend/` dir, or empty | `frontend-setup` |
-| **Setup done, no spec** | `frontend/` exists, no `work/frontend/specs/` | `frontend-tech-spec` |
-| **Spec done, no tickets** | Specs exist, `work/frontend/tickets/` empty | `frontend-tickets` |
-| **Tickets exist, none in-progress** | `tracker.py next` shows ready tickets | `frontend-implement` (on first ready) |
-| **Ticket in-progress** | `tracker.py board` shows `in-progress` | `frontend-implement` (continue) |
-| **Ticket in-review** | `tracker.py board` shows `in-review` | `frontend-ticket-review` |
-| **All tickets done** | `tracker.py board` shows all `done` | `frontend-final-review` (if exists) or wrap up |
+- For a named ticket, verify its blockers, then implement or review that ticket.
+- If a backend contract changed, read the changed OpenAPI document/spec and update affected audits/specs before wiring UI.
+- If the user asks to wrap up, append a short journal checkpoint with the current phase and next action, then report the exact next skill.
 
-## Session Start Protocol
+## Completion
 
-1. **Run the Quick Start commands above**
-2. **Read the current ticket** (if any `in-progress` or `in-review`)
-3. **Announce the phase and next action** to the user:
-   - "Frontend is in **<phase>**. The next step is **<skill>** because <reason>."
-4. **If implementing**: Confirm the ticket with the user, then invoke `frontend-implement`.
-5. **If reviewing**: Invoke `frontend-ticket-review`.
-
-## Session End Protocol
-
-When the user says "wrap up", "checkpoint", "I'm stopping", or at a natural stopping point:
-
-1. **Log the checkpoint**:
-   ```bash
-   python .claude/skills/frontend-tracker/scripts/tracker.py log "Session end: <what was done, what's next>" --phase <current-phase>
-   ```
-2. **Summarize for the user**:
-   - Current phase
-   - Ticket status (in-progress, in-review, done)
-   - Next skill to run when they return
-   - Any blockers or decisions needed
-
-## Common Questions
-
-**"Where are we?"** → Run this skill. It prints the board and next action.
-
-**"What's next?"** → `tracker.py next` shows ready tickets. If none, check blockers.
-
-**"I want to work on <specific screen>"** → Find the ticket in `work/frontend/tickets/`, check its `blocked_by`. If ready, `tracker.py set FT-NNN in-progress` then `frontend-implement`. If blocked, explain what needs to complete first.
-
-**"The backend changed, do we need to update?"** → Check if the backend ticket is in `blocked_by` for any frontend ticket. If so, that frontend ticket may need updates. Run `tracker.py board` to see dependencies.
-
-## Cross-Workstream Dependencies
-
-Frontend tickets can `blocked_by` backend tickets (T-XXX). The tracker script understands both prefixes. When a backend ticket completes, dependent frontend tickets may become ready.
-
-Example:
-```
-FT-007: Booking wizard  blocked_by: FT-003, FT-004, T-008
-```
-FT-007 won't appear in `tracker.py next` until T-008 (backend appointment booking) is `done`.
-
-## Emergency Commands
-
-If the tracker script fails or is missing:
-- `cat work/frontend/TRACKER.md` — read board directly
-- `ls work/frontend/tickets/` — list tickets
-- `grep "^status:" work/frontend/tickets/*.md` — see all statuses
+The user receives the current phase, exact next skill, ticket/blocker state, screen audit gaps, and any sign-off decision needed. Do not report an unavailable tracker command as successful.

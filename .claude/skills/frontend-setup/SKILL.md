@@ -1,233 +1,73 @@
 ---
 name: frontend-setup
-description: Initialize the React 19 + Vite + TanStack Router + TanStack Query + Zustand + shadcn/ui + Tailwind + React Hook Form + Zod + Biome frontend project in the frontend/ directory. Use when starting frontend work or when the user says "set up the frontend", "initialize the frontend project", "bootstrap the UI". Produces a working dev server with all quality gates passing.
+description: Initialize the project's React 19 and Vite frontend with the agreed router, query/cache, state, UI, forms, validation, API types, mock transport, and quality gates. Use after screen intake is reviewed or when the user asks to bootstrap the frontend.
 ---
 
 # Frontend Setup
 
-Bootstrap a production-ready React 19 frontend following the architectural standards and quality gates defined in CLAUDE.md.
+Create the frontend foundation described by `work/frontend/specs/00-frontend-architecture.md`. Use the versions and generated configuration supported by the installed tools; commit the lockfile so the setup is repeatable.
 
-## 0. Prerequisites
-- Node.js >= 20 (for React 19)
-- Backend API running at `http://localhost:8000` (or configured via `VITE_API_BASE_URL`)
+## Before setup
 
-## 1. Initialize Project
-```bash
-cd frontend
-npm create vite@latest . -- --template react-ts
+1. Read `work/frontend/screens.md`, approved frontend specs, repository instructions, and current package/tool versions.
+2. Confirm the screen inventory and API contract sources. Resolve any design or scope decisions needed for a coherent app shell.
+3. Preserve existing project files. If `frontend/` contains work, inspect it and extend the current app instead of reinitializing it.
+
+## Foundation
+
+Use React 19, Vite, TanStack Router with file-based routes, TanStack Query, Zustand, shadcn/ui, Tailwind CSS, React Hook Form, Zod, and Biome. Create the route directory and router configuration required by the file-based router. Add a root layout, error/not-found routes, and shared app providers.
+
+Configure Tailwind using the integration supported by the installed major version. For Tailwind v4, use the Vite plugin and CSS-first entry point; do not combine it with legacy v3 config files. Initialize Biome with the installed Biome CLI so its schema matches the package version. Use the shadcn CLI for supported primitives; compose a date picker from supported calendar/popover primitives when no date-picker registry item exists.
+
+Use a Vite proxy for `/api` in local development so the browser talks to the frontend origin. Preserve each API path exactly as exposed by OpenAPI, including trailing slashes. For deployment, use the project's documented same-origin proxy or an explicitly configured CORS policy.
+
+## API contract and mock mode
+
+- Add `openapi-typescript` and generate types from the project's OpenAPI document when available. Keep the generation command and source URL configurable; regenerate types when the contract changes.
+- If OpenAPI is not available, use approved backend specifications as a temporary source and mark unresolved contract questions. Do not claim handwritten types are generated.
+- Implement one API client and TanStack Query hooks as the screen data boundary. Use the same hooks in both mock and live modes.
+- Add MSW for development mock mode and tests. Fixtures and handlers must conform to generated OpenAPI types. Enable mock mode through a Vite environment setting; never include mock handlers in production.
+- Do not add token refresh unless the backend exposes a refresh operation. Use only the auth lifecycle and token fields in the current contract.
+- If the API exposes authenticated SSE, use a fetch-based SSE client capable of setting `Authorization: Bearer`; browser `EventSource` cannot set arbitrary auth headers. Treat the API's resync-required event as a query refetch signal.
+
+## Suggested structure
+
+```text
+frontend/src/
+  app/                 providers and router setup
+  routes/              TanStack file-based routes
+  components/ui/       generated shadcn primitives
+  components/shared/   layout and common feedback components
+  features/<domain>/   route sections, hooks, schemas, and UI
+  lib/                 API client, query client, auth, utilities
+  mocks/               MSW worker, handlers, contract-shaped fixtures
+  types/               generated OpenAPI types and UI-only types
 ```
 
-## 2. Install Core Dependencies
-```bash
-# Framework & Routing
-npm install react@19 react-dom@19
-npm install @tanstack/react-router @tanstack/react-router-devtools
-npm install @tanstack/react-query @tanstack/react-query-devtools
+Keep domain modules aligned to audited screen groups and approved specs. Do not create features just because a design includes a control; first verify the API supports it.
 
-# State Management
-npm install zustand
+## Quality gates
 
-# Forms & Validation
-npm install react-hook-form @hookform/resolvers zod
+Configure package scripts for:
 
-# Styling & Components
-npm install tailwindcss@latest @tailwindcss/vite
-npm install class-variance-authority clsx tailwind-merge
-npm install lucide-react
+- `npm run lint` — Biome lint
+- `npm run format` — Biome formatting check or formatting command supported by the pinned CLI
+- `npm run typecheck` — TypeScript build-mode check (`tsc -b` for Vite project-reference templates)
+- `npm run test` — Vitest and React Testing Library
+- `npm run test:e2e` — the configured browser suite for critical interactions
+- `npm run build` — Vite production build
 
-# Utilities
-npm install date-fns
-npm install axios
+Do not hand-copy a Biome schema from another major version. Verify each script against the generated app template and pinned package versions.
 
-# Dev Dependencies
-npm install -D @biomejs/biome
-npm install -D @types/react @types/react-dom
-npm install -D vite-tsconfig-paths
-npm install -D @tanstack/router-plugin
-npm install -D @testing-library/react @testing-library/jest-dom vitest jsdom @vitest/ui
-npm install -D playwright @playwright/test
-```
+## Acceptance
 
-## 3. Configure shadcn/ui
-```bash
-npx shadcn@latest init
-# Select: TypeScript, Default style, Slate base color, CSS variables, Yes to all prompts
-```
+- Vite starts and builds.
+- File-based routes are generated and resolve the audited screen routes.
+- Mock mode serves only contract-shaped data through the same API client/hooks intended for live mode.
+- OpenAPI types can be regenerated from the declared source.
+- The configured lint, format, typecheck, and test scripts run successfully.
+- The local API proxy preserves the upstream API path and avoids cross-origin redirects.
 
-Add essential components:
-```bash
-npx shadcn@latest add button input label textarea select checkbox radio-group switch
-npx shadcn@latest add card table dialog dropdown-menu separator avatar badge
-npx shadcn@latest add tabs sheet navigation-menu pagination tooltip popover
-npx shadcn@latest add form date-picker calendar  # may need custom or use react-day-picker
-npx shadcn@latest add command breadcrumb skeleton alert progress
-npx shadcn@latest add sidebar  # for persistent navigation
-```
+## Hand-off
 
-## 4. Project Structure
-```
-frontend/
-├── src/
-│   ├── app/                    # App-level providers, router
-│   │   ├── providers.tsx       # QueryClient, Router, Auth providers
-│   │   └── router.tsx          # TanStack Router file-based routes
-│   ├── components/
-│   │   ├── ui/                 # shadcn/ui components (auto-managed)
-│   │   ├── layout/             # Sidebar, Header, PageLayout
-│   │   ├── forms/              # Reusable form components
-│   │   ├── data-display/       # Tables, Cards, Badges, Status indicators
-│   │   └── feedback/           # Toast, Alert, Loading, Empty states
-│   ├── features/               # Feature-based modules
-│   │   ├── auth/               # Login, token management
-│   │   ├── appointments/       # Calendar, Today, Booking, Detail
-│   │   ├── patients/           # Directory, Profile, Form
-│   │   ├── services/           # Services catalog
-│   │   ├── schedules/          # Shifts, Time-off, Availability
-│   │   └── staff/              # Staff management
-│   ├── hooks/                  # Shared custom hooks
-│   ├── lib/                    # Utilities, API client, constants
-│   │   ├── api.ts              # Axios instance with interceptors
-│   │   ├── auth.ts             # Auth store (Zustand), token handling
-│   │   ├── utils.ts            # cn(), formatters, helpers
-│   │   └── constants.ts        # Appointment statuses, roles, etc.
-│   ├── types/                  # TypeScript types matching backend schemas
-│   │   ├── api.ts              # Generated or manual API types
-│   │   └── ui.ts               # UI-specific types
-│   ├── styles/
-│   │   └── globals.css         # Tailwind imports, CSS variables
-│   ├── main.tsx                # Entry point
-│   └── App.tsx                 # Root component
-├── public/
-├── index.html
-├── package.json
-├── tsconfig.json
-├── tsconfig.node.json
-├── vite.config.ts
-├── biome.json
-├── tailwind.config.ts
-├── postcss.config.js
-└── playwright.config.ts
-```
-
-## 5. Key Configuration Files
-
-### vite.config.ts
-```typescript
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
-import tanstackRouter from '@tanstack/router-plugin/vite'
-import tsconfigPaths from 'vite-tsconfig-paths'
-
-export default defineConfig({
-  plugins: [
-    tanstackRouter({ target: 'react', autoCodeSplitting: true }),
-    react(),
-    tailwindcss(),
-    tsconfigPaths(),
-  ],
-  server: {
-    port: 5173,
-    proxy: {
-      '/api': { target: 'http://localhost:8000', changeOrigin: true },
-    },
-  },
-})
-```
-
-### biome.json
-```json
-{
-  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
-  "organizeImports": { "enabled": true },
-  "linter": {
-    "enabled": true,
-    "rules": {
-      "recommended": true,
-      "correctness": { "noUnusedVariables": "error" },
-      "style": { "noNonNullAssertion": "warn" }
-    }
-  },
-  "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2 }
-}
-```
-
-### tailwind.config.ts
-```typescript
-import type { Config } from 'tailwindcss'
-import { fontFamily } from 'tailwindcss/defaultTheme'
-
-export default {
-  darkMode: ['class'],
-  content: ['./index.html', './src/**/*.{ts,tsx}'],
-  theme: {
-    extend: {
-      fontFamily: {
-        sans: ['Inter', ...fontFamily.sans],
-      },
-      colors: {
-        border: 'hsl(var(--border))',
-        input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))',
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
-        primary: { DEFAULT: 'hsl(var(--primary))', foreground: 'hsl(var(--primary-foreground))' },
-        secondary: { DEFAULT: 'hsl(var(--secondary))', foreground: 'hsl(var(--secondary-foreground))' },
-        destructive: { DEFAULT: 'hsl(var(--destructive))', foreground: 'hsl(var(--destructive-foreground))' },
-        muted: { DEFAULT: 'hsl(var(--muted))', foreground: 'hsl(var(--muted-foreground))' },
-        accent: { DEFAULT: 'hsl(var(--accent))', foreground: 'hsl(var(--accent-foreground))' },
-        popover: { DEFAULT: 'hsl(var(--popover))', foreground: 'hsl(var(--popover-foreground))' },
-        card: { DEFAULT: 'hsl(var(--card))', foreground: 'hsl(var(--card-foreground))' },
-        // Semantic colors for appointment states
-        appointment: {
-          scheduled: 'hsl(var(--appointment-scheduled))',
-          confirmed: 'hsl(var(--appointment-confirmed))',
-          'checked-in': 'hsl(var(--appointment-checked-in))',
-          'in-progress': 'hsl(var(--appointment-in-progress))',
-          completed: 'hsl(var(--appointment-completed))',
-          cancelled: 'hsl(var(--appointment-cancelled))',
-          'no-show': 'hsl(var(--appointment-no-show))',
-        },
-      },
-      borderRadius: { lg: 'var(--radius)', md: 'calc(var(--radius) - 2px)', sm: 'calc(var(--radius) - 4px)' },
-    },
-  },
-  plugins: [],
-} satisfies Config
-```
-
-## 6. Quality Gates
-All commits must pass:
-```bash
-npm run lint        # biome check
-npm run format      # biome format --check
-npm run typecheck   # tsc --noEmit
-npm run test        # vitest run
-npm run test:e2e    # playwright test
-```
-
-## 7. API Client Setup (`src/lib/api.ts`)
-- Axios instance with baseURL from `import.meta.env.VITE_API_BASE_URL`
-- Request interceptor: attach Bearer token from auth store
-- Response interceptor: handle 401 → redirect to login, 403 → show permission error
-- Correlation ID header propagation
-
-## 8. Auth Store (`src/lib/auth.ts`)
-Zustand store with:
-- `token`, `user`, `role`, `isAuthenticated`
-- `login(credentials)`, `logout()`, `refreshToken()`
-- Persist to localStorage (token only, not user object)
-- Role-based permission helpers
-
-## 9. Acceptance Criteria
-- [ ] `npm run dev` starts dev server on port 5173
-- [ ] `npm run build` produces production bundle
-- [ ] `npm run lint`, `format`, `typecheck`, `test` all pass
-- [ ] Backend proxy works: `/api/v1/health` returns 200
-- [ ] shadcn/ui components render correctly
-- [ ] TanStack Router file-based routing works
-- [ ] TanStack Query DevTools available in development
-- [ ] Zustand auth store persists token across refresh
-
-## 10. Hand-off
-Tell the user: frontend initialized → **clear context** → run `frontend-tech-spec` to create the frontend technical specification, then `frontend-tickets` to break down the UI work.
+Record the setup and contract source in `work/frontend/JOURNAL.md`. The next skill is `frontend-tech-spec` unless the approved architecture spec already exists; then use `frontend-tickets`.

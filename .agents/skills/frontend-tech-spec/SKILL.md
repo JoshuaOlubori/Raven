@@ -1,115 +1,50 @@
 ---
 name: frontend-tech-spec
-description: Create the frontend technical specification (work/specs/frontend/00-frontend-architecture.md and domain specs) based on the backend API specs, Stitch designs, and PRD. Use after frontend-setup completes, or when the user says "write the frontend spec", "create the frontend architecture", "plan the frontend". Produces no production code.
+description: Write the frontend architecture and domain specifications from the approved screen manifest, design audits, product requirements, and backend contract. Use after screen intake and before generating frontend tickets; produces no production code.
 ---
 
 # Frontend Technical Specification
 
-Convert the approved backend specs, PRD, and Stitch designs into a coherent frontend technical specification that guides implementation.
+Write the approved design and API decisions in `work/frontend/specs/`. Keep the screen manifest and its per-screen audits as the project-specific design source; do not copy project names, routes, roles, or endpoint assumptions into this reusable skill.
 
 ## Inputs
-- `work/prd.md` — Product requirements
-- `work/specs/*.md` — Backend domain specifications (auth, patients, services, schedules, appointments, notifications)
-- `docs/ui/stitch-prompts.md` — Stitch screen designs and interaction flows
-- `CLAUDE.md` — Project standards and quality gates
+
+- `work/frontend/screens.md` and each screen's `AUDIT.md`
+- `work/prd.md` when present
+- `work/specs/*.md` or the current OpenAPI schema
+- repository instructions and existing frontend code
 
 ## Output
-`work/specs/frontend/` directory with:
-- `00-frontend-architecture.md` — Overall architecture, stack, patterns, routing, state management
-- `01-auth-ui.md` — Sign-in, token management, route guards
-- `02-patients-ui.md` — Patient directory, profile, form
-- `03-services-ui.md` — Services catalog
-- `04-schedules-ui.md` — Provider shifts, time-off, availability
-- `05-appointments-ui.md` — Today dashboard, Calendar, Booking flow, Detail, Audit
-- `06-staff-ui.md` — Staff management
-- `07-shared-components.md` — Design system, reusable components, constants
-- `08-api-integration.md` — API client, error handling, SSE, types
 
-## Specification Template (per domain)
+- `work/frontend/specs/00-frontend-architecture.md`
+- one domain spec per audited screen group
+- `work/frontend/specs/08-api-integration.md` when API integration warrants a separate spec
 
-Each domain spec follows the backend spec structure adapted for frontend:
+Use filenames and domain groupings that match the current project instead of assuming a fixed set of screens. Every screen row must map to a route, a spec section, and its supporting API operations or an explicit `n/a` disposition.
 
-```markdown
-# <Domain> UI Module Spec
+## Required sections
 
-_Status: draft · Date: YYYY-MM-DD · Covers: <PRD requirements>_
-
-## 1. Responsibility
-What this UI module owns (screens, components, interactions). What it explicitly does NOT own.
-
-## 2. Screens & Routes
-| Screen | Route | Roles | Description |
-|---|---|---|---|
-| Sign In | /signin | Public | Staff authentication |
-| Today Dashboard | /today | Admin, Receptionist | Operational overview |
-| Appointments Calendar | /appointments | All | Week/day view with filters |
-| ... | ... | ... | ... |
-
-## 3. Component Hierarchy
-Tree of components for this domain, showing composition and data flow.
-
-## 4. State Management
-- **Server State** (TanStack Query): Queries, mutations, cache keys, invalidation strategy
-- **Client State** (Zustand): Auth, UI preferences, form drafts, optimistic updates
-- **URL State** (TanStack Router): Search params, filters, pagination
-
-## 5. API Contract
-Mapping of UI actions to backend endpoints:
-| UI Action | Endpoint | Method | Request Type | Response Type | Error Handling |
-|---|---|---|---|---|---|
-
-## 6. Types
-TypeScript interfaces matching backend schemas (generated or manual):
-- Request/Response types
-- UI-specific extensions (e.g., `AppointmentWithRelations`)
-
-## 7. Permissions & Role Guards
-Component-level and route-level permission checks based on `CurrentUser.role`.
-
-## 8. Responsive Breakpoints
-| Breakpoint | Layout Changes |
-|---|---|
-| Desktop (≥1024px) | Full sidebar, multi-column tables |
-| Tablet (768-1023px) | Collapsible sidebar, stacked cards |
-| Mobile (<768px) | Drawer navigation, list views |
-
-## 9. Accessibility
-- Keyboard navigation, focus management
-- ARIA labels, roles, live regions
-- Color contrast (WCAG AA)
-- Screen reader announcements for status changes
-
-## 10. Loading / Error / Empty States
-Standardized patterns per component type.
-
-## 11. Test Strategy
-- Component tests (React Testing Library)
-- Integration tests (MSW for API mocking)
-- E2E tests (Playwright) for critical flows
-
-## 12. Traceability
-| PRD Requirement | Spec Section | Screen/Component |
-```
+1. Responsibility and explicit exclusions
+2. Screen/route matrix, roles, and navigation
+3. Component composition and module boundaries
+4. State ownership: TanStack Query for server state, Zustand for shared client state, URL state for shareable filters
+5. API operation and schema mapping, auth and error behavior
+6. Mock-to-live boundary: MSW handlers and fixtures first, one stable API client/hooks interface, live transport after user approval
+7. Responsive behavior for phone, tablet, small desktop, and wide desktop
+8. Accessibility and keyboard behavior
+9. Loading, empty, error, permission, and conflict states
+10. Test and browser-evidence strategy
+11. Traceability to screen slugs and product requirements
 
 ## Process
 
-1. **Read all inputs** — Understand backend API contracts, PRD requirements, Stitch designs
-2. **Draft 00-frontend-architecture.md** — Establish patterns, routing strategy, state architecture
-3. **Draft domain specs** — One per backend domain, map screens to API endpoints
-4. **Review with user** — Present spec table of contents, ask for approval on granularity and approach
-5. **Finalize** — Mark specs as `approved`, update `updated` date
+1. Read all sources, then list unresolved product or contract questions.
+2. Map every design element accepted by its audit to real schema fields, operations, and permissions. Use exact OpenAPI paths and do not assume a client filter is server authorization.
+3. Specify the React/Vite client-rendered SPA architecture and TanStack Router file-based routes. Define component data needs through the agreed query hooks and browser interactions through ordinary React components.
+4. Specify mock mode with MSW and fixtures conforming to generated OpenAPI types. Keep screens on the same query hooks and API client when live mode is enabled.
+5. For authenticated SSE, specify a fetch-based stream that can send the bearer token. Define reconnect and resync behavior from the actual event contract.
+6. Write the specs under `work/frontend/specs/`, mark them `draft`, and present the decisions and file list for user review. Mark them `approved` only after approval.
 
-## Key Design Decisions to Document
+## Completion
 
-- **Routing**: File-based with TanStack Router, route trees per role
-- **Data Fetching**: TanStack Query with 5-minute stale time, background refetch on window focus
-- **Mutations**: Optimistic updates for immediate UI feedback, rollback on error
-- **SSE**: EventSource wrapper with reconnection, feed into TanStack Query cache invalidation
-- **Forms**: React Hook Form + Zod resolvers, shared validation schemas with backend where possible
-- **Design System**: shadcn/ui + Tailwind CSS variables, semantic color tokens for appointment states
-- **Role-based Rendering**: Route guards + component-level `can()` helpers
-- **Date/Time**: All timestamps in clinic local time (America/New_York), display via `date-fns-tz`
-
-## Hand-off
-
-Tell the user: frontend tech spec complete → **clear context** → run `frontend-tickets` to break down into implementation tickets.
+Every screen row has traceability to a route and a spec section. Every visible field, action, role gate, and API dependency agrees with the screen audit and backend source. Unknowns remain named questions; the specs contain no inferred product capabilities. The next skill is `frontend-tickets` after approval.

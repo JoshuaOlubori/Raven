@@ -1,100 +1,50 @@
 ---
 name: frontend-implement
-description: Implement exactly one frontend ticket from the work/frontend/ tracker test-first (red → green, one test at a time), following the frontend tech spec and frontend-setup standards, then run quality gates, commit, and hand the ticket to review. Use whenever the user says "implement FT-00X", "build the next frontend ticket", "start frontend coding", "address the frontend review comments", or after frontend-resume selects a ticket. Handles both first-time implementation and fixing a changes-requested review.
+description: Implement exactly one ready frontend ticket, following its mock or backend phase, the approved screen audit and frontend specs, then verify it and hand it to review. Use for a named FT ticket, a ready ticket selected by frontend-resume, or requested fixes to a changes-requested ticket.
 ---
 
-# Frontend Implement (one ticket per session)
+# Frontend Implement
 
-One ticket, one context window, one commit series. Finishing a ticket and clearing context keeps each review small and each session sharp.
+Implement one `FT-*` ticket per run. Read repository instructions, the ticket, referenced specs, the corresponding screen audit, and the current diff before editing.
 
-## 0. Pick and Claim
-- If no ticket id was given, run `tracker.py next` (from frontend-tracker) and propose the first ready ticket; confirm with the user.
-- Run `tracker.py set FT-NNN in-progress`.
+## 1. Verify scope and phase
 
-## 1. Load Context (and only this)
-Read, in order:
-- The ticket
-- The spec sections named in `spec_refs`
-- `work/specs/frontend/00-frontend-architecture.md`
-- `work/frontend/test-strategy.md`
-- The `frontend-setup` skill sections for each layer the ticket touches
-- `CONTEXT.md`
-- Skim existing code for the modules involved and follow its patterns.
+- Confirm the ticket exists, its `blocked_by` entries are done, and it is not waiting for user sign-off.
+- Read `phase` and follow the matching path below.
+- Update the ticket to `in-progress` with `frontend-tracker`.
+- If the ticket requires an unresolved design, scope, permission, or API decision, continue independent work and ask only for that decision.
 
-If the ticket is `changes-requested`, read the newest `work/frontend/reviews/FT-NNN-review-N.md` and treat its blockers and majors as the task list.
+## 2. Implement the ticket
 
-## 2. Build Test-First
-For each row in the ticket's *Test plan*, in order:
-1. **Red:** Write one test at its named seam. Run it and watch it fail for the right reason.
-2. **Green:** Write the smallest code that passes it, in the correct layer per the architecture. Run the whole suite.
-3. Move to the next row.
+Use the ticket's test plan and approved API/design sources. Add focused tests before implementation when the ticket requests behavior changes. Keep components small and accessible, forms on React Hook Form plus Zod, server state in TanStack Query, shared client state in Zustand, and shareable filters in the URL.
 
-### Test Seams (Frontend)
-| Seam | Tooling | Used For |
-|---|---|---|
-| **Component Unit** | Vitest + React Testing Library | Component rendering, props, user interactions, accessibility |
-| **Hook Unit** | Vitest | Custom hook logic, state transitions, API integration |
-| **Integration** | Vitest + MSW | Component + API mock, form submissions, data flows |
-| **E2E** | Playwright | Critical user flows, auth, routing, responsive breakpoints |
+### Mock phase
 
-### Rules of the Loop
-- Expected values come from the spec or mock data, never from calling the code under test again.
-- Test through public interfaces (component props, hook returns, API contracts) rather than private helpers.
-- Components stay thin: each component declares its data needs via hooks. Business logic lives in hooks or utilities.
-- Use the naming conventions from the architecture spec.
-- Add only what the ticket's acceptance criteria require. Spot an adjacent need? Write it under *Notes* as a proposed follow-up ticket and continue.
-- **Responsive tests**: Test at desktop (≥1024px), tablet (768px), mobile (375px) viewports where layout changes.
-- **Accessibility tests**: Test keyboard navigation, ARIA attributes, focus management.
+- Use the stable API client and query hooks with MSW handlers in mock mode. Fixtures conform to OpenAPI-generated types or approved contract specs.
+- Build only audited fields/actions. Remove or redesign unsupported Stitch content; do not make it look like a real backend capability through mock data.
+- Keep MSW enabled in development mock mode and tests, and disabled in production.
+- Use the Playwright MCP in the browser to inspect the route at 375, 768, 1024, and 1440 CSS-pixel widths. Save and inspect screenshots under `work/frontend/evidence/<ticket-id>/`.
 
-## 3. Deviations
-When the spec turns out wrong or incomplete, stop, state the conflict, and ask the user (or, for a small clarification, record your assumption in the ticket's *Implementation log* and `tracker.py log`). The spec stays the source of truth; propose a spec edit rather than silently diverging.
+### Backend phase
 
-## 4. Implementation Standards (from frontend-setup & tech spec)
+- Verify every request against the current OpenAPI contract and the backend ticket dependencies.
+- Enable the live transport through the existing API client/hooks; preserve exact paths, methods, query names, payloads, and trailing slashes.
+- Handle the error states the API can return, including authentication, permission, validation, conflict, and missing-resource errors when applicable.
+- Keep MSW handlers for tests, but ensure the configured live mode does not intercept requests.
+- If an authenticated SSE stream is part of the ticket, use fetch-based streaming so the bearer token can be sent. On the contract's resync-required event, invalidate/refetch the relevant TanStack Query data.
 
-### Component Patterns
-- **Server Components**: Use TanStack Query hooks for data fetching
-- **Client Components**: Mark with `'use client'` when using Zustand, browser APIs, or interactivity
-- **Compound Components**: For complex UI (Table, Select, DatePicker) use shadcn/ui patterns
-- **Form Components**: React Hook Form + Zod resolver, controlled/uncontrolled appropriately
+## 3. Verify
 
-### State Management
-- **TanStack Query**: All server state. Keys: `['domain', 'action', params]`. Stale time: 5 min. Cache time: 10 min.
-- **Zustand**: Auth store, UI preferences (sidebar open, theme), form drafts, optimistic updates
-- **URL State**: TanStack Router search params for filters, pagination, sorting
+Run the ticket's tests and applicable repo quality gates from its spec. Use the Playwright MCP to exercise the screen in the browser and capture the four required widths for visual tickets. Check keyboard access, focus, overflow, loading/empty/error states, and that the displayed data/actions match the screen audit. Do not claim a browser check or command passed unless it ran successfully.
 
-### API Integration
-- Use `api.ts` axios instance with interceptors
-- Mutations: Optimistic update → API call → Invalidate queries → Rollback on error
-- SSE: `useEventSource` hook feeds into queryClient.invalidateQueries()
+## 4. Finish
 
-### Styling
-- Tailwind CSS variables for theming (light/dark)
-- `cn()` utility for class merging
-- Semantic color tokens for appointment states
-- 8-point spacing rhythm (`space-y-4`, `gap-4`, `p-4`)
-- Responsive: `md:` for tablet, `lg:` for desktop
+1. Mark each acceptance criterion with its concrete evidence.
+2. Run lint, formatting, typecheck, relevant tests, and build using the project's configured scripts.
+3. Record files, decisions, deviations, commands, and screenshot paths in the implementation log.
+4. Commit one ticket using the repository's ticket-prefixed conventional commit format.
+5. Set the ticket to `in-review` and log the transition.
 
-### Accessibility
-- Semantic HTML (`<table>`, `<button>`, `<nav>`, `<main>`)
-- Focus visible: `focus-visible:ring-2 focus-visible:ring-ring`
-- ARIA labels on icon buttons, status badges
-- Live regions for dynamic updates (SSE notifications)
-- Color contrast: WCAG AA minimum
+## 5. Hand-off
 
-## 5. Finish
-1. Walk the ticket's acceptance criteria and tick each with the test that proves it.
-2. Run the **quality gates**:
-   ```bash
-   npm run lint        # biome check
-   npm run format      # biome format --check
-   npm run typecheck   # tsc --noEmit
-   npm run test        # vitest run
-   npm run test:e2e    # playwright test (for tickets marked with E2E)
-   ```
-   All green.
-3. Fill the ticket's *Implementation log*: what was built, files touched, decisions, deviations, commands run.
-4. Commit: `FT-NNN: <title>` (conventional-commit prefix welcome). Record the sha in the log.
-5. `tracker.py set FT-NNN in-review`.
-
-## 6. Hand-off
-Tell the user: ticket built → **clear context** → run `frontend-ticket-review` for FT-NNN in a fresh session, because a reviewer who did not write the code reads it more honestly.
+Tell the user which ticket is ready for `frontend-ticket-review`. For mock-phase tickets, explain that code review does not release backend wiring: the global mock-phase gate remains blocked until every mock screen is reviewed and the user approves the rendered result.

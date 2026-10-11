@@ -1,66 +1,64 @@
 ---
 name: frontend-tracker
-description: The markdown issue tracker and work history for spec-driven frontend development. Use whenever a ticket is created, claimed, moved between statuses, reviewed or completed, whenever work history needs recording, and whenever the user asks "what's done", "what's next", "show the board" or "log this" for frontend work. Every other frontend-* skill reads and writes the tracker through this skill, so consult it before touching anything under work/frontend/.
+description: Read and update the frontend backlog, ticket statuses, blocker graph, and journal. Use whenever frontend tickets are created, claimed, reviewed, completed, blocked, or when the user asks what is done or next. All frontend project state is under work/frontend/.
 ---
 
 # Frontend Tracker
 
-All frontend project state lives as plain markdown under `work/frontend/`, so it survives `/clear`, new sessions, and model switches.
+Keep the editable screen manifest, generated board, tickets, reviews, evidence, specs, and journal under `work/frontend/`. The tracker script is deterministic; ticket files remain the source of truth.
 
-```
+```text
 work/frontend/
-  TRACKER.md         board (generated — never hand-edit)
-  JOURNAL.md         append-only history of everything that happened
-  specs/             00-frontend-architecture.md + one <domain>.md per module (frontend-tech-spec)
-  tickets/           FT-001-<slug>.md ...
-  reviews/           FT-001-review-1.md ..., final-review.md
+  screens.md          project-specific screen manifest
+  TRACKER.md          generated board
+  JOURNAL.md          append-only project history
+  specs/              approved frontend specs
+  tickets/            FT-* ticket files
+  reviews/            ticket and final review reports
+  evidence/           browser screenshots and review evidence
 ```
 
-## Operations
+## Commands
 
-Run the bundled script from the repo root. It handles status changes, the ready-frontier, and the journal deterministically.
+Run from the repository root. Use `py -3` on Windows or `python3` where that is the configured Python command. The script lives inside the skill installation folder; use `.claude/skills` in Claude Code or `.agents/skills` in Codex.
 
 ```bash
-python .claude/skills/frontend-tracker/scripts/tracker.py init
-python .claude/skills/frontend-tracker/scripts/tracker.py next                 # tickets whose blockers are all done
-python .claude/skills/frontend-tracker/scripts/tracker.py set FT-003 in-progress
-python .claude/skills/frontend-tracker/scripts/tracker.py log "decided to use react-day-picker for calendar" --phase spec
-python .claude/skills/frontend-tracker/scripts/tracker.py board
+py -3 .claude/skills/frontend-tracker/scripts/tracker.py init
+py -3 .claude/skills/frontend-tracker/scripts/tracker.py board
+py -3 .claude/skills/frontend-tracker/scripts/tracker.py next
+py -3 .claude/skills/frontend-tracker/scripts/tracker.py validate
+py -3 .claude/skills/frontend-tracker/scripts/tracker.py set FT-003 in-progress
+py -3 .claude/skills/frontend-tracker/scripts/tracker.py log "screen manifest audited" --phase screens
 ```
 
-`<skills-dir>` is the folder this skill was installed into (`.claude/skills`). The script handles frontend ticket prefixes (FT-).
+On macOS/Linux or a setup without `py`, replace `py -3` with `python3`; in Codex, replace `.claude/skills` with `.agents/skills`.
 
-## Ticket File Format
+`init` creates missing directories and files, then refreshes the board. `next` treats a frontend `FT-*` or backend `T-*` dependency as ready only when its ticket status is `done`. An unknown dependency stays blocked and is reported by `validate`. The board links to the actual ticket filename instead of reconstructing it from the title.
 
-Front matter uses one `key: value` per line (the script parses these lines exactly):
+## Ticket format
+
+Each ticket has one front-matter key per line. `blocked_by` accepts `FT-*`, `T-*`, or `-`.
 
 ```markdown
 ---
-id: FT-004
-title: Patient directory with search and pagination
-status: todo            # todo | in-progress | in-review | changes-requested | blocked | done
-mode: AFK               # AFK (agent alone) | HITL (needs a human decision/action)
-blocked_by: FT-002, FT-003   # or "-"
-spec_refs: specs/frontend/02-patients-ui.md, specs/frontend/07-shared-components.md
-updated: 2026-10-03
+id: FT-003
+title: Patient directory mock UI
+status: todo
+phase: mock
+mode: AFK
+blocked_by: FT-001
+spec_refs: specs/02-patients-ui.md
+covers: screen patient-directory
+updated: YYYY-MM-DD
 ---
 ```
 
-## Status Lifecycle
+Statuses are `todo`, `in-progress`, `in-review`, `awaiting-signoff`, `changes-requested`, `blocked`, and `done`. For mock-phase sign-off, keep the phase gate in `awaiting-signoff` until the user approves it; only then set it to `done`, which releases backend tickets.
 
-`todo` → `in-progress` → `in-review` → `done`, with `changes-requested` looping back to `in-progress`. A ticket reaches `done` only after `frontend-ticket-review` approves it.
+## Journal
 
-## Journal Discipline
+Log phase changes, ticket status changes, scope decisions, design/API deviations, and session checkpoints. Status updates log themselves. Keep other entries short, factual, and tied to an artifact.
 
-Append one journal line at each of these moments: a phase starts or finishes, a ticket changes status, a design decision is made, a surprise or deviation from the spec occurs, a session ends. Lines stay short and factual and name the artifact touched. The status command logs transitions automatically; use `log` for everything else.
+## Completion
 
-## Reading History
-
-To resume or audit, read `work/frontend/TRACKER.md`, then the last ~30 lines of `work/frontend/JOURNAL.md`, then the specific ticket and its `reviews/` files. The journal is the source of truth for what happened; ticket files are the source of truth for what was asked.
-
-## Ticket Prefix Convention
-
-- Backend tickets: `T-XXX`
-- Frontend tickets: `FT-XXX`
-
-This keeps the two workstreams independently trackable while allowing cross-references in `blocked_by` (e.g., a frontend ticket can be blocked by a backend ticket).
+After writing or editing tickets, `board` shows the correct file links, `next` respects all frontend and backend blockers, and `validate` reports no missing IDs, unknown blockers, or dependency cycles.

@@ -5,12 +5,10 @@ Manages the markdown issue tracker for frontend spec-driven development.
 """
 
 import argparse
-import os
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 # Find repo root by looking for the existing work/ directory or .git
 def find_repo_root() -> Path:
@@ -28,11 +26,16 @@ REVIEWS_DIR = WORK / "reviews"
 TRACKER_FILE = WORK / "TRACKER.md"
 JOURNAL_FILE = WORK / "JOURNAL.md"
 
-STATUS_ORDER = ["todo", "in-progress", "in-review", "changes-requested", "blocked", "done"]
+STATUS_ORDER = [
+    "todo",
+    "in-progress",
+    "in-review",
+    "awaiting-signoff",
+    "changes-requested",
+    "blocked",
+    "done",
+]
 VALID_STATUSES = set(STATUS_ORDER)
-VALID_MODES = {"AFK", "HITL"}
-
-PREFIX = "FT-"
 
 
 def ensure_work_dirs():
@@ -63,8 +66,22 @@ def load_all_tickets() -> list[dict]:
         t = parse_ticket(path)
         fm = t["front_matter"]
         if "id" in fm:
+            fm["_path"] = path.relative_to(ROOT).as_posix()
             tickets.append(fm)
     return tickets
+
+
+def load_backend_tickets() -> list[dict]:
+    """Load backend ticket front matter for cross-stream blocker checks."""
+    backend_tickets: list[dict] = []
+    backend_dir = ROOT / "work" / "tickets"
+    if not backend_dir.exists():
+        return backend_tickets
+    for path in sorted(backend_dir.glob("T-*.md")):
+        fm = parse_ticket(path)["front_matter"]
+        if fm.get("id", "").startswith("T-"):
+            backend_tickets.append(fm)
+    return backend_tickets
 
 
 def get_ticket_path(ticket_id: str) -> Path:
@@ -122,7 +139,9 @@ def generate_board() -> str:
         status = t.get("status", "?")
         mode = t.get("mode", "?")
         blocked = t.get("blocked_by", "-")
-        lines.append(f"| [{tid}](tickets/{tid}-{title.lower().replace(' ', '-')}.md) | {title} | {status} | {mode} | {blocked} |")
+        ticket_path = t.get("_path", f"work/frontend/tickets/{tid}.md")
+        relative_path = ticket_path.removeprefix("work/frontend/")
+        lines.append(f"| [{tid}]({relative_path}) | {title} | {status} | {mode} | {blocked} |")
 
     return "\n".join(lines) + "\n"
 
@@ -136,13 +155,17 @@ def write_board():
 def get_ready_tickets() -> list[dict]:
     """Return tickets whose blockers are all done."""
     tickets = load_all_tickets()
-    done_ids = {t["id"] for t in tickets if t.get("status") == "done"}
+    done_ids = {
+        t["id"]
+        for t in [*tickets, *load_backend_tickets()]
+        if t.get("status") == "done" and "id" in t
+    }
 
     ready = []
     for t in tickets:
         if t.get("status") in ("todo", "blocked"):
             blocked_by = t.get("blocked_by", "").strip()
-            if blocked_by == "-":
+            if not blocked_by or blocked_by == "-":
                 ready.append(t)
             else:
                 blockers = [b.strip() for b in blocked_by.split(",")]
@@ -175,7 +198,7 @@ def cmd_next(args):
 def cmd_set(args):
     """Set ticket status."""
     if args.status not in VALID_STATUSES:
-        print(f"Invalid status: {args.status}. Valid: {', '.join(VALID_STATUSES)}")
+        print(f"Invalid status: {args.status}. Valid: {', '.join(STATUS_ORDER)}")
         sys.exit(1)
     update_ticket_status(args.ticket_id, args.status)
     write_board()
@@ -194,11 +217,70 @@ def cmd_board(args):
     print(generate_board())
 
 
+def cmd_init(args):
+    """Initialize tracker directories and files."""
+    init_tracker()
+
+
+def cmd_validate(args):
+    """Validate frontend ticket IDs, dependencies, and dependency cycles."""
+    tickets = load_all_tickets()
+    backend_tickets = load_backend_tickets()
+    by_id = {t.get("id"): t for t in tickets if t.get("id")}
+    known_ids = set(by_id) | {t["id"] for t in backend_tickets if t.get("id")}
+    errors: list[str] = []
+
+    if len(by_id) != len(tickets):
+        errors.append("Ticket IDs are missing or duplicated.")
+
+    graph: dict[str, list[str]] = {}
+    for ticket in tickets:
+        ticket_id = ticket.get("id", "?")
+        graph[ticket_id] = []
+        raw_blockers = ticket.get("blocked_by", "").strip()
+        blockers = (
+            []
+            if raw_blockers in ("", "-")
+            else [blocker.strip() for blocker in raw_blockers.split(",")]
+        )
+        for blocker in blockers:
+            if blocker not in known_ids:
+                errors.append(f"{ticket_id} has unknown blocker {blocker}.")
+            elif blocker in by_id:
+                graph[ticket_id].append(blocker)
+
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(ticket_id: str) -> None:
+        if ticket_id in visiting:
+            errors.append(f"Dependency cycle includes {ticket_id}.")
+            return
+        if ticket_id in visited:
+            return
+        visiting.add(ticket_id)
+        for blocker in graph.get(ticket_id, []):
+            visit(blocker)
+        visiting.remove(ticket_id)
+        visited.add(ticket_id)
+
+    for ticket_id in graph:
+        visit(ticket_id)
+
+    if errors:
+        print("Frontend tracker validation failed:")
+        for error in dict.fromkeys(errors):
+            print(f"- {error}")
+        sys.exit(1)
+    print(f"Frontend tracker valid ({len(tickets)} frontend tickets; backend blockers resolved).")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Frontend Tracker")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("init", help="Initialize tracker directories and files")
+    p_init = sub.add_parser("init", help="Initialize tracker directories and files")
+    p_init.set_defaults(func=cmd_init)
 
     p_next = sub.add_parser("next", help="Show ready tickets")
     p_next.set_defaults(func=cmd_next)
@@ -215,6 +297,9 @@ def main():
 
     p_board = sub.add_parser("board", help="Show tracker board")
     p_board.set_defaults(func=cmd_board)
+
+    p_validate = sub.add_parser("validate", help="Check blocker references and cycles")
+    p_validate.set_defaults(func=cmd_validate)
 
     args = parser.parse_args()
     if hasattr(args, "func"):
