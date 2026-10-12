@@ -9,7 +9,7 @@ Write the approved design and API decisions in `work/frontend/specs/`. Keep the 
 
 ## Inputs
 
-- `work/frontend/screens.md` and each screen's `AUDIT.md`
+- `work/frontend/screens.md`, each screen's local export folder, and its `AUDIT.md`
 - `work/prd.md` when present
 - `work/specs/*.md` or the current OpenAPI schema
 - repository instructions and existing frontend code

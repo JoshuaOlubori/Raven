@@ -9,7 +9,7 @@ Generate the backlog from `work/frontend/screens.md` and approved `work/frontend
 
 ## Preconditions
 
-- Every `kind: screen` row has local design/code assets, an API audit, a proposed route, and known roles or an explicit public/role-free disposition.
+- Every `kind: screen` row points to local design/code assets in the manifest's `Local export folder` column, has an API audit, a proposed route, and known roles or an explicit public/role-free disposition.
 - Reference rows are identified as references and do not become routes or tickets.
 - API gaps are resolved or explicitly kept out of scope in the manifest.
 - Frontend specs are approved and trace each screen to the API contract or `n/a`.

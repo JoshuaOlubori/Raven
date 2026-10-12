@@ -11,13 +11,13 @@ Copy this file to `work/frontend/screens.md` when starting a frontend project. I
 
 ## Screen retrieval request
 
-Paste the current project-specific Stitch instructions here. Include project and screen IDs, the required artifacts, and any retrieval instructions. A screen ID is not a hosted download URL: use the configured Stitch integration to retrieve the screenshot and implementation code, then use `curl -L` only for hosted URLs returned by that integration.
+Record the project and screen IDs and required artifacts here. If screen exports are supplied locally, list their root and folder mapping in the table below and use those files first. Use a configured Stitch integration only to fill gaps in the local exports. A screen ID is not a hosted download URL; use `curl -L` only for hosted URLs returned by the integration.
 
 ## Output
 
-- Asset root: `docs/ui/stitch/<project-slug>/`
-- Per screen: `<slug>/screen.png`, `<slug>/code.html`, and `<slug>/AUDIT.md`
-- Per reference: `<slug>/reference.png` and a short note describing how it informs the design system
+- Local export root (editable): `stitch_screens/`
+- Per screen export: `<folder>/screen.png` and `<folder>/code.html`; preserve source exports in place and add `<folder>/AUDIT.md`
+- Per reference: record its path and a short note describing how it informs the design system
 
 ## Contract and product sources
 
@@ -38,7 +38,7 @@ Use the OpenAPI schema as the endpoint and payload source of truth. Use approved
 
 ## Screens and references
 
-| Slug | Name | Stitch ID | Kind (`screen` / `reference`) | Proposed route | Roles | API operations to audit | Asset status | Audit status | Mock ticket | Backend ticket |
+| Slug | Name | Design source ID | Kind (`screen` / `reference`) | Local export folder | Proposed route | Roles | API operations to audit | Asset status | Audit status | Mock ticket | Backend ticket |
 |---|---|---|---|---|---|---|---|---|---|
 
 Use `pending` for asset and audit status until the files and contract audit exist. Keep reference-only rows out of the route and ticket lists. Leave uncertain routes, roles, or endpoint mappings blank until audited.
